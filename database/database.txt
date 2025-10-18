@@ -1,0 +1,227 @@
+-- ============================================
+-- ASISvOX - PostgreSQL Database Schema
+-- ============================================
+
+-- Extensiones necesarias
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- ============================================
+-- TABLA: users
+-- ============================================
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'teacher')),
+    phone VARCHAR(20),
+    photo_url TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_is_active ON users(is_active);
+
+-- ============================================
+-- TABLA: academic_years
+-- ============================================
+CREATE TABLE academic_years (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    is_current BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_academic_years_is_current ON academic_years(is_current);
+
+-- ============================================
+-- TABLA: subjects
+-- ============================================
+CREATE TABLE subjects (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    description TEXT,
+    color VARCHAR(7),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_subjects_code ON subjects(code);
+CREATE INDEX idx_subjects_is_active ON subjects(is_active);
+
+-- ============================================
+-- TABLA: grades
+-- ============================================
+CREATE TABLE grades (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    level INTEGER NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_grades_level ON grades(level);
+CREATE INDEX idx_grades_is_active ON grades(is_active);
+
+-- ============================================
+-- TABLA: sections
+-- ============================================
+CREATE TABLE sections (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    grade_id UUID NOT NULL REFERENCES grades(id) ON DELETE CASCADE,
+    name VARCHAR(50) NOT NULL,
+    academic_year_id UUID NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE,
+    max_students INTEGER DEFAULT 30,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(grade_id, name, academic_year_id)
+);
+
+CREATE INDEX idx_sections_grade_id ON sections(grade_id);
+CREATE INDEX idx_sections_academic_year_id ON sections(academic_year_id);
+CREATE INDEX idx_sections_is_active ON sections(is_active);
+
+-- ============================================
+-- TABLA: students
+-- ============================================
+CREATE TABLE students (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    first_name VARCHAR(255) NOT NULL,
+    last_name VARCHAR(255) NOT NULL,
+    identification_number VARCHAR(50) UNIQUE,
+    date_of_birth DATE,
+    gender VARCHAR(20) CHECK (gender IN ('male', 'female', 'other')),
+    photo_url TEXT,
+    email VARCHAR(255),
+    phone VARCHAR(20),
+    address TEXT,
+    parent_name VARCHAR(255),
+    parent_phone VARCHAR(20),
+    parent_email VARCHAR(255),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_students_identification_number ON students(identification_number);
+CREATE INDEX idx_students_is_active ON students(is_active);
+CREATE INDEX idx_students_last_name ON students(last_name);
+
+-- ============================================
+-- TABLA: classes
+-- ============================================
+CREATE TABLE classes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    section_id UUID NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    academic_year_id UUID NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE,
+    classroom VARCHAR(100),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(section_id, subject_id, academic_year_id)
+);
+
+CREATE INDEX idx_classes_section_id ON classes(section_id);
+CREATE INDEX idx_classes_subject_id ON classes(subject_id);
+CREATE INDEX idx_classes_teacher_id ON classes(teacher_id);
+CREATE INDEX idx_classes_academic_year_id ON classes(academic_year_id);
+
+-- ============================================
+-- TABLA: enrollments
+-- ============================================
+CREATE TABLE enrollments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    section_id UUID NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+    academic_year_id UUID NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE,
+    enrollment_date DATE DEFAULT CURRENT_DATE,
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'transferred', 'graduated')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(student_id, section_id, academic_year_id)
+);
+
+CREATE INDEX idx_enrollments_student_id ON enrollments(student_id);
+CREATE INDEX idx_enrollments_section_id ON enrollments(section_id);
+
+-- ============================================
+-- TABLA: attendance
+-- ============================================
+CREATE TABLE attendance (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    status VARCHAR(20) NOT NULL CHECK (status IN ('present', 'absent', 'late', 'excused')),
+    method VARCHAR(20) CHECK (method IN ('manual', 'voice')),
+    notes TEXT,
+    recorded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(class_id, student_id, date)
+);
+
+CREATE INDEX idx_attendance_class_id ON attendance(class_id);
+CREATE INDEX idx_attendance_student_id ON attendance(student_id);
+CREATE INDEX idx_attendance_date ON attendance(date);
+
+-- ============================================
+-- DATOS INICIALES
+-- ============================================
+
+-- Insertar tipos de evaluación
+CREATE TABLE assessment_types (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO assessment_types (name, description) VALUES
+    ('Examen', 'Evaluación formal escrita u oral'),
+    ('Tarea', 'Trabajo asignado para realizar fuera de clase'),
+    ('Participación', 'Participación activa en clase');
+
+-- Crear usuario administrador por defecto
+-- Contraseña: admin123
+INSERT INTO users (email, password_hash, full_name, role) VALUES
+    ('admin@asisvox.com', crypt('admin123', gen_salt('bf')), 'Administrador del Sistema', 'admin');
+
+-- Crear año académico actual
+INSERT INTO academic_years (name, start_date, end_date, is_current) VALUES
+    ('2025', '2025-01-01', '2025-12-31', true);
+
+-- ============================================
+-- TRIGGERS para updated_at
+-- ============================================
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Aplicar triggers
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_academic_years_updated_at BEFORE UPDATE ON academic_years FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_subjects_updated_at BEFORE UPDATE ON subjects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_grades_updated_at BEFORE UPDATE ON grades FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_sections_updated_at BEFORE UPDATE ON sections FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+

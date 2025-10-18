@@ -8,59 +8,63 @@ import bcrypt from 'bcryptjs';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { asyncHandler, createError } from '../middleware/errorHandler';
 import { AuthCredentials, AuthResponse, RegisterData, User, ApiResponse } from '../../../shared/types';
+import { query } from '../config/connection';
 
-// Mock de usuarios para desarrollo (reemplazar con base de datos)
-const mockUsers: User[] = [
-  {
-    id: '1',
-    name: 'Prof. María González',
-    email: 'maria.gonzalez@asisVox.com',
-    role: 'teacher',
-    status: 'active',
-    createdAt: new Date('2024-01-15'),
-    updatedAt: new Date('2024-01-15'),
-  },
-  {
-    id: '2',
-    name: 'Admin Principal',
-    email: 'admin@asisVox.com',
-    role: 'admin',
-    status: 'active',
-    createdAt: new Date('2024-01-10'),
-    updatedAt: new Date('2024-01-10'),
-  },
-];
+// ===============================
+// FUNCIONES DE BASE DE DATOS
+// ===============================
 
-// Contraseñas hasheadas mock (en producción usar bcrypt)
-const mockPasswords: { [email: string]: string } = {
-  'maria.gonzalez@asisVox.com': '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewOvgOcJ94VK6T5W', // password: teacher123
-  'admin@asisVox.com': '$2a$12$7Z1v3Qr5BwVHxkd0LHAkCOYz6TtxMQJqhN8/lewOvgOcJ94VK6T5W', // password: admin123
+// Buscar usuario por email
+const findUserByEmail = async (email: string) => {
+  const result = await query(
+    'SELECT id, email, password_hash, full_name, role, phone, photo_url, is_active, created_at, updated_at, last_login FROM users WHERE email = $1',
+    [email]
+  );
+  return result.rows[0];
+};
+
+// Crear nuevo usuario
+const createUser = async (userData: RegisterData) => {
+  const { name, email, password, role } = userData;
+  const hashedPassword = await bcrypt.hash(password, 12);
+  
+  const result = await query(
+    `INSERT INTO users (email, password_hash, full_name, role) 
+     VALUES ($1, $2, $3, $4) 
+     RETURNING id, email, full_name, role, phone, photo_url, is_active, created_at, updated_at`,
+    [email, hashedPassword, name, role]
+  );
+  
+  return result.rows[0];
+};
+
+// Actualizar último login
+const updateLastLogin = async (userId: string) => {
+  await query(
+    'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
+    [userId]
+  );
+};
+
+// Buscar usuario por ID
+const findUserById = async (userId: string) => {
+  const result = await query(
+    'SELECT id, email, password_hash, full_name, role, phone, photo_url, is_active, created_at, updated_at, last_login FROM users WHERE id = $1',
+    [userId]
+  );
+  return result.rows[0];
 };
 
 // Generar JWT token
 const generateToken = (user: User): string => {
-  return jwt.sign(
-    {
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    },
-    process.env.JWT_SECRET || 'your-secret-key',
-    {
-      expiresIn: process.env.JWT_EXPIRES_IN || '24h',
-    }
-  );
+  const secret = process.env.JWT_SECRET || 'your-secret-key';
+  return jwt.sign({ userId: user.id, email: user.email, role: user.role }, secret, { expiresIn: '24h' });
 };
 
 // Generar refresh token
 const generateRefreshToken = (user: User): string => {
-  return jwt.sign(
-    { userId: user.id },
-    process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key',
-    {
-      expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
-    }
-  );
+  const secret = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key';
+  return jwt.sign({ userId: user.id }, secret, { expiresIn: '7d' });
 };
 
 // ===============================
@@ -76,23 +80,32 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     throw createError('Email y contraseña son requeridos', 400);
   }
 
-  // Buscar usuario
-  const user = mockUsers.find(u => u.email === email && u.status === 'active');
+  // Buscar usuario en la base de datos
+  const dbUser = await findUserByEmail(email);
   
-  if (!user) {
+  if (!dbUser || !dbUser.is_active) {
     throw createError('Credenciales inválidas', 401);
   }
 
   // Verificar contraseña
-  const storedPassword = mockPasswords[email];
-  if (!storedPassword) {
-    throw createError('Credenciales inválidas', 401);
-  }
-
-  const isValidPassword = await bcrypt.compare(password, storedPassword);
+  const isValidPassword = await bcrypt.compare(password, dbUser.password_hash);
   if (!isValidPassword) {
     throw createError('Credenciales inválidas', 401);
   }
+
+  // Actualizar último login
+  await updateLastLogin(dbUser.id);
+
+  // Convertir formato de BD a formato de respuesta
+  const user: User = {
+    id: dbUser.id,
+    name: dbUser.full_name,
+    email: dbUser.email,
+    role: dbUser.role,
+    status: dbUser.is_active ? 'active' : 'inactive',
+    createdAt: new Date(dbUser.created_at),
+    updatedAt: new Date(dbUser.updated_at),
+  };
 
   // Generar tokens
   const token = generateToken(user);
@@ -126,28 +139,24 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Verificar si el usuario ya existe
-  const existingUser = mockUsers.find(u => u.email === email);
+  const existingUser = await findUserByEmail(email);
   if (existingUser) {
     throw createError('El usuario ya existe', 409);
   }
 
-  // Crear nuevo usuario
+  // Crear nuevo usuario en la base de datos
+  const dbUser = await createUser({ name, email, password, role, subjects });
+
+  // Convertir formato de BD a formato de respuesta
   const newUser: User = {
-    id: (mockUsers.length + 1).toString(),
-    name,
-    email,
-    role,
-    status: 'active',
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    id: dbUser.id,
+    name: dbUser.full_name,
+    email: dbUser.email,
+    role: dbUser.role,
+    status: dbUser.is_active ? 'active' : 'inactive',
+    createdAt: new Date(dbUser.created_at),
+    updatedAt: new Date(dbUser.updated_at),
   };
-
-  // Hashear contraseña
-  const hashedPassword = await bcrypt.hash(password, 12);
-  mockPasswords[email] = hashedPassword;
-
-  // Agregar a la lista mock
-  mockUsers.push(newUser);
 
   // Generar tokens
   const token = generateToken(newUser);
@@ -199,11 +208,22 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
       process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key'
     ) as any;
 
-    // Buscar usuario
-    const user = mockUsers.find(u => u.id === decoded.userId && u.status === 'active');
-    if (!user) {
+    // Buscar usuario en la base de datos
+    const dbUser = await findUserById(decoded.userId);
+    if (!dbUser || !dbUser.is_active) {
       throw createError('Usuario no encontrado', 404);
     }
+
+    // Convertir formato de BD a formato de respuesta
+    const user: User = {
+      id: dbUser.id,
+      name: dbUser.full_name,
+      email: dbUser.email,
+      role: dbUser.role,
+      status: dbUser.is_active ? 'active' : 'inactive',
+      createdAt: new Date(dbUser.created_at),
+      updatedAt: new Date(dbUser.updated_at),
+    };
 
     // Generar nuevos tokens
     const newToken = generateToken(user);
@@ -236,11 +256,22 @@ export const getCurrentUser = asyncHandler(async (req: AuthenticatedRequest, res
     throw createError('Usuario no autenticado', 401);
   }
 
-  // Buscar usuario completo
-  const user = mockUsers.find(u => u.id === req.user!.id && u.status === 'active');
-  if (!user) {
+  // Buscar usuario completo en la base de datos
+  const dbUser = await findUserById(req.user!.id);
+  if (!dbUser || !dbUser.is_active) {
     throw createError('Usuario no encontrado', 404);
   }
+
+  // Convertir formato de BD a formato de respuesta
+  const user: User = {
+    id: dbUser.id,
+    name: dbUser.full_name,
+    email: dbUser.email,
+    role: dbUser.role,
+    status: dbUser.is_active ? 'active' : 'inactive',
+    createdAt: new Date(dbUser.created_at),
+    updatedAt: new Date(dbUser.updated_at),
+  };
 
   const response: ApiResponse<User> = {
     success: true,
