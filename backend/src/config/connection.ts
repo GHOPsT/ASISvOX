@@ -18,6 +18,8 @@ interface DatabaseConfig {
   max?: number; // Número máximo de clientes en el pool
   idleTimeoutMillis?: number; // Tiempo de espera antes de cerrar cliente inactivo
   connectionTimeoutMillis?: number; // Tiempo de espera para conexión
+  ssl?: boolean | object; // Configuración SSL
+  allowExitOnIdle?: boolean; // Permitir salir cuando esté idle
 }
 
 // Configuración desde variables de entorno
@@ -30,6 +32,9 @@ const dbConfig: DatabaseConfig = {
   max: parseInt(process.env.DB_POOL_MAX || '20'),
   idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '30000'),
   connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT || '2000'),
+  // Configuraciones adicionales para resolver problemas de autenticación
+  ssl: false, // Deshabilitar SSL para conexiones locales
+  allowExitOnIdle: true, // Permitir salir cuando esté idle
 };
 
 // ============================================
@@ -229,6 +234,46 @@ export const deleteById = async (
 };
 
 // ============================================
+// FUNCIÓN DE INICIALIZACIÓN
+// ============================================
+
+export const initializeDatabase = async (): Promise<void> => {
+  try {
+    console.log('🔄 Conectando a PostgreSQL...');
+    
+    // Probar la conexión
+    const isConnected = await testConnection();
+    
+    if (isConnected) {
+      console.log('✅ Conectado a PostgreSQL exitosamente');
+      console.log(`📊 Base de datos: ${dbConfig.database}`);
+      console.log(`🏠 Host: ${dbConfig.host}:${dbConfig.port}`);
+    } else {
+      throw new Error('No se pudo conectar a PostgreSQL');
+    }
+    
+    // Configurar manejo de cierre graceful
+    process.on('SIGINT', async () => {
+      console.log('🔄 Cerrando conexión a PostgreSQL...');
+      await closePool();
+      console.log('✅ Conexión cerrada correctamente');
+      process.exit(0);
+    });
+    
+    process.on('SIGTERM', async () => {
+      console.log('🔄 Cerrando conexión a PostgreSQL...');
+      await closePool();
+      console.log('✅ Conexión cerrada correctamente');
+      process.exit(0);
+    });
+    
+  } catch (error) {
+    console.error('❌ Error conectando a PostgreSQL:', error);
+    throw error;
+  }
+};
+
+// ============================================
 // EXPORTACIONES
 // ============================================
 
@@ -244,4 +289,5 @@ export default {
   insert,
   update,
   deleteById,
+  initializeDatabase,
 };

@@ -113,9 +113,9 @@ const PORT = process.env.PORT || 3001;
 // Función para iniciar el servidor
 export const startServer = async () => {
   try {
-    // Inicializar la base de datos
-    const { connectDatabase } = await import('./config/database');
-    await connectDatabase();
+    // Inicializar la base de datos PostgreSQL
+    const { initializeDatabase } = await import('./config/connection');
+    await initializeDatabase();
     
     app.listen(PORT, () => {
       console.log(`🚀 ASISvOX Backend running on port ${PORT}`);
