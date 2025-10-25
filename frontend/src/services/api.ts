@@ -2,6 +2,7 @@
 // CLIENTE API - FRONTEND
 // ===============================
 
+import { tokenService } from './tokenService';
 import { 
   AuthAPI,
   UserAPI,
@@ -42,20 +43,24 @@ class ApiClient {
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
-    // Recuperar token del localStorage si existe
-    this.token = localStorage.getItem('auth_token');
+    // Recuperar token del tokenService si existe
+    this.token = tokenService.getToken();
+    // Habilitar sincronización entre pestañas
+    tokenService.enableStorageSync((newToken) => {
+      this.token = newToken;
+    });
   }
 
   // Configurar token de autenticación
   setToken(token: string) {
     this.token = token;
-    localStorage.setItem('auth_token', token);
+    tokenService.setToken(token);
   }
 
   // Limpiar token
   clearToken() {
     this.token = null;
-    localStorage.removeItem('auth_token');
+    tokenService.clearToken();
   }
 
   // Método base para hacer peticiones HTTP
@@ -70,7 +75,12 @@ class ApiClient {
       ...(options.headers as Record<string, string> || {}),
     };
 
-    if (this.token) {
+    // Obtener el token más reciente del tokenService
+    const currentToken = tokenService.getToken();
+    if (currentToken) {
+      headers.Authorization = `Bearer ${currentToken}`;
+    } else if (this.token) {
+      // Fallback al token de la instancia si tokenService no lo tiene
       headers.Authorization = `Bearer ${this.token}`;
     }
 

@@ -1,5 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { apiClient } from '../services/api';
+import { tokenService } from '../services/tokenService';
+import { User as SharedUser } from '../../../shared/types';
 
+// Redefinir User para el contexto - solo teachers y admins pueden usar esta app
 interface User {
   id: string;
   email: string;
@@ -22,98 +26,107 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Initialize demo users if they don't exist
-    const existingUsers = localStorage.getItem('asisVox_users');
-    if (!existingUsers) {
-      const demoUsers = [
-        {
-          id: '1',
-          name: 'Prof. María González',
-          email: 'profesor@asisVox.com',
-          password: 'demo123',
-          role: 'teacher'
-        },
-        {
-          id: '2',
-          name: 'Admin Sistema',
-          email: 'admin@asisVox.com',
-          password: 'admin123',
-          role: 'admin'
-        }
-      ];
-      localStorage.setItem('asisVox_users', JSON.stringify(demoUsers));
-    }
-
     // Check if user is logged in from localStorage
     const storedUser = localStorage.getItem('asisVox_user');
+    
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      
+      // Configurar el token en el apiClient desde tokenService si existe
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
     }
+    
     setIsLoading(false);
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Check if user exists in localStorage (simulated database)
-    const users = JSON.parse(localStorage.getItem('asisVox_users') || '[]');
-    const foundUser = users.find((u: any) => u.email === email && u.password === password);
-    
-    if (foundUser) {
-      const userWithoutPassword = { ...foundUser };
-      delete userWithoutPassword.password;
-      setUser(userWithoutPassword);
-      localStorage.setItem('asisVox_user', JSON.stringify(userWithoutPassword));
+    try {
+      // Llamar al API real del backend
+      const response = await apiClient.auth.login({ email, password });
+      
+      if (response.success && response.data) {
+        const { user, token } = response.data;
+        
+        // Convertir el User del backend al formato del contexto
+        const contextUser: User = {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role as 'teacher' | 'admin' // Asegurar que es teacher o admin
+        };
+        
+        // Guardar usuario
+        setUser(contextUser);
+        localStorage.setItem('asisVox_user', JSON.stringify(contextUser));
+        
+        // Guardar token usando tokenService - ahora es un JWT válido del backend
+        tokenService.setToken(token, 24 * 60 * 60); // 24 horas
+        apiClient.setToken(token);
+        
+        setIsLoading(false);
+        return true;
+      }
+      
       setIsLoading(false);
-      return true;
+      return false;
+    } catch (error) {
+      console.error('Error en login:', error);
+      setIsLoading(false);
+      return false;
     }
-    
-    setIsLoading(false);
-    return false;
   };
 
   const register = async (name: string, email: string, password: string, role: 'teacher' | 'admin'): Promise<boolean> => {
     setIsLoading(true);
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Check if user already exists
-    const users = JSON.parse(localStorage.getItem('asisVox_users') || '[]');
-    const existingUser = users.find((u: any) => u.email === email);
-    
-    if (existingUser) {
+    try {
+      // Llamar al API real del backend
+      const response = await apiClient.auth.register({ name, email, password, role });
+      
+      if (response.success && response.data) {
+        const { user, token } = response.data;
+        
+        // Convertir el User del backend al formato del contexto
+        const contextUser: User = {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role as 'teacher' | 'admin'
+        };
+        
+        // Guardar usuario
+        setUser(contextUser);
+        localStorage.setItem('asisVox_user', JSON.stringify(contextUser));
+        
+        // Guardar token usando tokenService - ahora es un JWT válido del backend
+        tokenService.setToken(token, 24 * 60 * 60); // 24 horas
+        apiClient.setToken(token);
+        
+        setIsLoading(false);
+        return true;
+      }
+      
+      setIsLoading(false);
+      return false;
+    } catch (error) {
+      console.error('Error en register:', error);
       setIsLoading(false);
       return false;
     }
-    
-    // Create new user
-    const newUser = {
-      id: Date.now().toString(),
-      name,
-      email,
-      password,
-      role
-    };
-    
-    users.push(newUser);
-    localStorage.setItem('asisVox_users', JSON.stringify(users));
-    
-    // Log in the new user
-    const userWithoutPassword = (({ password, ...rest }) => rest)(newUser);
-    setUser(userWithoutPassword);
-    localStorage.setItem('asisVox_user', JSON.stringify(userWithoutPassword));
-    
-    setIsLoading(false);
-    return true;
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('asisVox_user');
+    // Usar tokenService para limpiar el token
+    tokenService.clearToken();
+    apiClient.clearToken();
   };
 
   const value = {

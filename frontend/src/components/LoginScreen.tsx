@@ -24,13 +24,15 @@ export function LoginScreen({ onBack, onRegister }: LoginScreenProps) {
     const newErrors: Record<string, string> = {};
     
     if (!formData.email) {
-      newErrors.email = "El correo electrónico es requerido";
+      newErrors.email = "📧 El correo electrónico es requerido";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = "Formato de correo electrónico inválido";
+      newErrors.email = "❌ El formato de correo no es válido (ej: usuario@dominio.com)";
     }
     
     if (!formData.password) {
-      newErrors.password = "La contraseña es requerida";
+      newErrors.password = "🔐 La contraseña es requerida";
+    } else if (formData.password.length < 3) {
+      newErrors.password = "❌ La contraseña debe tener al menos 3 caracteres";
     }
     
     setErrors(newErrors);
@@ -42,12 +44,25 @@ export function LoginScreen({ onBack, onRegister }: LoginScreenProps) {
     
     if (!validateForm()) return;
     
-    const success = await login(formData.email, formData.password);
-    
-    if (!success) {
-      toast.error("Credenciales inválidas. Verifica tu correo y contraseña.");
-    } else {
-      toast.success("¡Bienvenido a ASISvOX!");
+    try {
+      const success = await login(formData.email, formData.password);
+      
+      if (!success) {
+        toast.error("❌ Credenciales Inválidas", {
+          description: "El correo o contraseña que ingresaste no son correctos. Por favor, verifica e intenta de nuevo.",
+          duration: 5000,
+        });
+      } else {
+        toast.success("✅ ¡Bienvenido a ASISvOX!", {
+          description: "Tu sesión ha sido iniciada correctamente.",
+          duration: 3000,
+        });
+      }
+    } catch (error) {
+      toast.error("❌ Error al Iniciar Sesión", {
+        description: "Ocurrió un error inesperado. Por favor, intenta de nuevo.",
+        duration: 5000,
+      });
     }
   };
 
@@ -56,6 +71,11 @@ export function LoginScreen({ onBack, onRegister }: LoginScreenProps) {
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: "" }));
     }
+  };
+
+  const fillTestCredentials = (email: string, password: string) => {
+    setFormData({ email, password });
+    setErrors({});
   };
 
   return (
@@ -130,7 +150,8 @@ export function LoginScreen({ onBack, onRegister }: LoginScreenProps) {
 
             <Button 
               type="submit" 
-              className="w-full h-12"
+              className="w-full h-12 border-2 border-primary hover:shadow-lg hover:shadow-primary/30 transition-all duration-200"
+              variant="outline"
               disabled={isLoading}
             >
               {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
@@ -150,25 +171,46 @@ export function LoginScreen({ onBack, onRegister }: LoginScreenProps) {
             </p>
           </div>
 
-          {/* Demo credentials */}
           <div className="mt-8 p-4 bg-muted/50 rounded-lg">
             <p className="text-muted-foreground mb-3">
-              <strong>Credenciales de prueba:</strong>
+              <strong>🧪 Credenciales de Prueba:</strong>
             </p>
             <div className="space-y-3">
-              <div className="p-2 bg-background rounded border">
-                <p className="text-muted-foreground">
-                  <strong>👨‍🏫 Profesor:</strong><br />
-                  <span className="text-foreground">profesor@asisVox.com</span><br />
-                  <span className="text-foreground">demo123</span>
+              <div className="p-3 bg-background rounded border border-blue-200 hover:border-blue-400 transition-colors">
+                <p className="text-sm text-muted-foreground mb-2">
+                  <strong>👨‍🏫 Profesor</strong>
                 </p>
+                <p className="text-xs text-foreground mb-2">
+                  <span className="font-mono">profesor@asisVox.com</span><br />
+                  <span className="font-mono">demo123</span>
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={() => fillTestCredentials('profesor@asisVox.com', 'demo123')}
+                >
+                  Usar Credenciales
+                </Button>
               </div>
-              <div className="p-2 bg-background rounded border">
-                <p className="text-muted-foreground">
-                  <strong>👨‍💼 Administrador:</strong><br />
-                  <span className="text-foreground">admin@asisVox.com</span><br />
-                  <span className="text-foreground">admin123</span>
+              <div className="p-3 bg-background rounded border border-green-200 hover:border-green-400 transition-colors">
+                <p className="text-sm text-muted-foreground mb-2">
+                  <strong>👨‍💼 Administrador</strong>
                 </p>
+                <p className="text-xs text-foreground mb-2">
+                  <span className="font-mono">admin@asisVox.com</span><br />
+                  <span className="font-mono">admin123</span>
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={() => fillTestCredentials('admin@asisVox.com', 'admin123')}
+                >
+                  Usar Credenciales
+                </Button>
               </div>
             </div>
           </div>

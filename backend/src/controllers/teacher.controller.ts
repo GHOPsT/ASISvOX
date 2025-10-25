@@ -6,6 +6,7 @@ import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { asyncHandler, createError } from '../middleware/errorHandler';
 import { Teacher, Class, Student, ApiResponse, PaginatedResponse } from '../../../shared/types';
+import { query } from '../config/connection';
 
 // Mock data de profesores (reemplazar con base de datos)
 const mockTeachers: Teacher[] = [
@@ -246,20 +247,63 @@ export const getTeacherSchedule = asyncHandler(async (req: Request, res: Respons
 export const getTeacherClasses = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  // Buscar en mock data primero, luego en base de datos
-  let teacher = mockTeachers.find(t => t.id === id);
-  
-  if (!teacher) {
+  // Buscar en la base de datos si el usuario es un profesor
+  const teacherResult = await query(
+    'SELECT id, email, full_name, role FROM users WHERE id = $1 AND role = $2',
+    [id, 'teacher']
+  );
+
+  if (teacherResult.rows.length === 0) {
     throw createError('Profesor no encontrado', 404);
   }
 
-  // Para pruebas, usar mock data de clases
-  const teacherClasses = mockClasses.filter(c => c.teacherId === id);
+  // Obtener clases del profesor desde la BD
+  const classesResult = await query(
+    `SELECT 
+      c.id,
+      c.name,
+      sub.name as subject,
+      s.name as section,
+      g.name as grade,
+      c.classroom,
+      ay.name as academic_year,
+      COUNT(DISTINCT e.student_id) as student_count,
+      COALESCE(AVG(gr.score), 0) as average_grade,
+      c.is_active,
+      c.created_at
+    FROM classes c
+    LEFT JOIN subjects sub ON c.subject_id = sub.id
+    LEFT JOIN sections s ON c.section_id = s.id
+    LEFT JOIN grades g ON s.grade_id = g.id
+    LEFT JOIN academic_years ay ON c.academic_year_id = ay.id
+    LEFT JOIN enrollments e ON c.id = e.class_id
+    LEFT JOIN grades gr ON e.student_id = gr.student_id AND c.id = gr.class_id
+    WHERE c.teacher_id = $1 AND c.is_active = true
+    GROUP BY c.id, sub.name, s.name, g.name, ay.name
+    ORDER BY c.created_at DESC`,
+    [id]
+  );
 
-  const response: ApiResponse<Class[]> = {
+  const teacherClasses = classesResult.rows.map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    subject: row.subject,
+    section: row.section,
+    grade: row.grade,
+    classroom: row.classroom,
+    academicYear: row.academic_year,
+    studentCount: parseInt(row.student_count),
+    averageGrade: parseFloat(row.average_grade),
+    isActive: row.is_active,
+    createdAt: row.created_at
+  }));
+
+  const response: ApiResponse<any[]> = {
     success: true,
     data: teacherClasses,
-    message: 'Clases obtenidas exitosamente',
+    message: teacherClasses.length === 0 
+      ? 'No hay clases asignadas actualmente' 
+      : 'Clases obtenidas exitosamente',
     timestamp: new Date(),
   };
 

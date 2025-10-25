@@ -8,6 +8,7 @@ import { AddStudentsModal } from "./AddStudentsModal";
 import { NotificationsPanel } from "./NotificationsPanel";
 import { useAuth } from "../contexts/AuthContext";
 import { apiClient } from "../services/api";
+import { tokenService } from "../services/tokenService";
 import { 
   Users, 
   BookOpen, 
@@ -40,6 +41,12 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
       if (!user?.id) return;
       
       try {
+        // Asegurarse de que el token está configurado en el apiClient
+        const token = tokenService.getToken();
+        if (token) {
+          apiClient.setToken(token);
+        }
+        
         // Cargar clases desde el API del docente
         const response = await apiClient.teachers.getTeacherClasses(user.id);
         
@@ -124,16 +131,27 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
 
   const handleAddClass = async (classData: any) => {
     try {
+      if (!user?.id) {
+        console.error('No user ID available');
+        return;
+      }
+
       // El backend ahora requiere: subjectId, sectionId, teacherId, academicYearId, classroom
       const newClassData = {
         subjectId: classData.subjectId,
         sectionId: classData.sectionId,
-        teacherId: user?.id,
+        teacherId: user.id,
         academicYearId: classData.academicYearId,
         classroom: classData.classroom || ""
       };
 
-      const response = await apiClient.classes.createClass(newClassData);
+      // Asegurarse de que el token está configurado
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
+
+      const response = await apiClient.classes.createClass(newClassData as any);
       
       if (response.success && response.data) {
         // Mapear la clase creada al formato esperado
@@ -223,39 +241,52 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
         })}
       </div>
 
-      {/* Today's Schedule */}
-      <Card className="p-4">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3>Horario de Hoy</h3>
-            <Badge variant="secondary">
-              {new Date().toLocaleDateString('es-ES', { 
-                weekday: 'long', 
-                day: 'numeric', 
-                month: 'long' 
-              })}
-            </Badge>
-          </div>
-          
-          <div className="space-y-2">
-            <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/20">
-              <div>
-                <p className="font-medium">Matemáticas 10°A</p>
-                <p className="text-sm text-muted-foreground">8:00 AM - 9:30 AM</p>
-              </div>
-              <Badge>Próxima</Badge>
+      {/* Today's Schedule - Solo si hay clases */}
+      {classes.length > 0 && (
+        <Card className="p-4">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3>Clases de Hoy</h3>
+              <Badge variant="secondary">
+                {new Date().toLocaleDateString('es-ES', { 
+                  weekday: 'long', 
+                  day: 'numeric', 
+                  month: 'long' 
+                })}
+              </Badge>
             </div>
             
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-              <div>
-                <p className="font-medium">Geometría 9°C</p>
-                <p className="text-sm text-muted-foreground">2:00 PM - 3:30 PM</p>
-              </div>
-              <Badge variant="outline">Más tarde</Badge>
+            <div className="space-y-2">
+              {classes.length > 0 ? (
+                classes.slice(0, 2).map((cls, index) => (
+                  <div 
+                    key={cls.id} 
+                    className={`flex items-center justify-between p-3 rounded-lg border ${
+                      index === 0 
+                        ? 'bg-primary/5 border-primary/20' 
+                        : 'bg-muted/50 border-muted'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-medium">{cls.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {cls.classroom ? `Aula: ${cls.classroom}` : 'Sin aula asignada'}
+                      </p>
+                    </div>
+                    <Badge variant={index === 0 ? "default" : "outline"}>
+                      {index === 0 ? 'Próxima' : 'Más tarde'}
+                    </Badge>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center text-muted-foreground py-4">
+                  No hay clases programadas para hoy
+                </p>
+              )}
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       {/* Quick Actions */}
       <div className="space-y-3">
@@ -303,15 +334,30 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
         </div>
 
         <div className="space-y-3">
-          {classes.map((classData) => (
-            <ClassCard
-              key={classData.id}
-              classData={classData}
-              onClick={() => onClassSelect(classData.id)}
-              onAttendanceClick={() => onAttendanceSelect(classData.id)}
-              onAddStudentsClick={() => handleOpenAddStudents(classData)}
-            />
-          ))}
+          {classes.length > 0 ? (
+            classes.map((classData) => (
+              <ClassCard
+                key={classData.id}
+                classData={classData}
+                onClick={() => onClassSelect(classData.id)}
+                onAttendanceClick={() => onAttendanceSelect(classData.id)}
+                onAddStudentsClick={() => handleOpenAddStudents(classData)}
+              />
+            ))
+          ) : (
+            <Card className="p-8 text-center">
+              <p className="text-muted-foreground mb-4">
+                No tienes clases asignadas aún
+              </p>
+              <Button 
+                onClick={() => setShowAddClassModal(true)}
+                className="gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Crear Primera Clase
+              </Button>
+            </Card>
+          )}
         </div>
       </div>
 
