@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Download, FileText, FileSpreadsheet, Filter, Calendar } from "lucide-react";
 import { Button } from "./ui/button";
-import { Card } from "../../../components/ui/card";
+import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";

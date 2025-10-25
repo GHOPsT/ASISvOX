@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
-import { Card } from "../../../components/ui/card";
+import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Mic, MicOff, Volume2, AlertCircle, Users } from "lucide-react";
 import { toast } from "sonner";

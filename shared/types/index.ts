@@ -58,11 +58,17 @@ export interface Class {
   subject: string;
   teacherId: string;
   students: string[];
-  schedule: string;
-  period: string;
-  academicYear: string;
-  createdAt: Date;
-  updatedAt: Date;
+  schedule?: string;
+  period?: string;
+  academicYear?: string;
+  classroom?: string;
+  studentCount?: number;
+  averageGrade?: number;
+  nextClass?: string;
+  isCurrent?: boolean;
+  isActive?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 // Asistencia

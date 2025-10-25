@@ -186,12 +186,11 @@ export interface ClassFilters {
 }
 
 export interface CreateClassData {
-  name: string;
-  subject: string;
+  subjectId: string;
+  sectionId: string;
   teacherId: string;
-  schedule: string;
-  period: string;
-  academicYear: string;
+  academicYearId: string;
+  classroom?: string;
 }
 
 // ===============================

@@ -103,8 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('asisVox_users', JSON.stringify(users));
     
     // Log in the new user
-    const userWithoutPassword = { ...newUser };
-    delete userWithoutPassword.password;
+    const userWithoutPassword = (({ password, ...rest }) => rest)(newUser);
     setUser(userWithoutPassword);
     localStorage.setItem('asisVox_user', JSON.stringify(userWithoutPassword));
     

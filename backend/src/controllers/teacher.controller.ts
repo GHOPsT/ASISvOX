@@ -246,12 +246,14 @@ export const getTeacherSchedule = asyncHandler(async (req: Request, res: Respons
 export const getTeacherClasses = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  const teacher = mockTeachers.find(t => t.id === id);
+  // Buscar en mock data primero, luego en base de datos
+  let teacher = mockTeachers.find(t => t.id === id);
   
   if (!teacher) {
     throw createError('Profesor no encontrado', 404);
   }
 
+  // Para pruebas, usar mock data de clases
   const teacherClasses = mockClasses.filter(c => c.teacherId === id);
 
   const response: ApiResponse<Class[]> = {

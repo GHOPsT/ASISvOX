@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Clock, MapPin } from "lucide-react";
 import { Button } from "../../components/ui/button";
-import { Card } from "../../../../components/ui/card";
+import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 

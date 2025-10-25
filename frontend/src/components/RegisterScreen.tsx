@@ -237,13 +237,15 @@ export function RegisterScreen({ onBack, onLogin }: RegisterScreenProps) {
                 </RadioGroup>
               </div>
 
-              <Button 
-                type="submit" 
-                className="w-full h-12"
-                disabled={isLoading}
-              >
-                {isLoading ? "Creando cuenta..." : "Crear Cuenta"}
-              </Button>
+              <div className="flex justify-center">
+                <Button 
+                  type="submit" 
+                  className="w-full max-w-xs h-12 bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 border-2 border-primary/20 hover:border-primary/40 shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Creando cuenta..." : "Crear Cuenta"}
+                </Button>
+              </div>
             </form>
 
             <div className="mt-6 text-center">
@@ -251,7 +253,7 @@ export function RegisterScreen({ onBack, onLogin }: RegisterScreenProps) {
                 ¿Ya tienes una cuenta?{" "}
                 <Button 
                   variant="link" 
-                  className="p-0 h-auto" 
+                  className="p-0 h-auto hover:text-primary transition-colors duration-200" 
                   onClick={onLogin}
                 >
                   Inicia sesión aquí

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card } from "../../../components/ui/card";
+import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { ClassCard } from "./ClassCard";
@@ -7,6 +7,7 @@ import { AddClassModal } from "./AddClassModal";
 import { AddStudentsModal } from "./AddStudentsModal";
 import { NotificationsPanel } from "./NotificationsPanel";
 import { useAuth } from "../contexts/AuthContext";
+import { apiClient } from "../services/api";
 import { 
   Users, 
   BookOpen, 
@@ -33,58 +34,52 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
   const [selectedClassForStudents, setSelectedClassForStudents] = useState<any>(null);
   const [classes, setClasses] = useState<any[]>([]);
 
-  // Load classes from localStorage
+  // Load classes from API
   useEffect(() => {
-    const storedClasses = localStorage.getItem(`teacher_classes_${user?.id}`);
-    if (storedClasses) {
-      setClasses(JSON.parse(storedClasses));
-    } else {
-      // Initialize with default classes
-      const defaultClasses = [
-        {
-          id: "1",
-          name: "Matemáticas 10°A",
-          subject: "Matemáticas",
-          schedule: "Lun, Mié, Vie - 8:00 AM",
-          studentCount: 32,
-          averageGrade: 8.5,
-          nextClass: "Hoy 8:00 AM",
-          students: []
-        },
-        {
-          id: "2",
-          name: "Álgebra 11°B",
-          subject: "Matemáticas",
-          schedule: "Mar, Jue - 10:00 AM",
-          studentCount: 28,
-          averageGrade: 7.8,
-          nextClass: "Mañana 10:00 AM",
-          students: []
-        },
-        {
-          id: "3",
-          name: "Geometría 9°C",
-          subject: "Matemáticas",
-          schedule: "Lun, Mié, Vie - 2:00 PM",
-          studentCount: 30,
-          averageGrade: 8.1,
-          nextClass: "Hoy 2:00 PM",
-          students: []
-        },
-        {
-          id: "4",
-          name: "Cálculo 12°A",
-          subject: "Matemáticas Avanzadas",
-          schedule: "Mar, Jue, Sáb - 9:00 AM",
-          studentCount: 25,
-          averageGrade: 8.9,
-          nextClass: "Mañana 9:00 AM",
-          students: []
+    const loadTeacherClasses = async () => {
+      if (!user?.id) return;
+      
+      try {
+        // Cargar clases desde el API del docente
+        const response = await apiClient.teachers.getTeacherClasses(user.id);
+        
+        if (response.success && response.data) {
+          // Mapear los datos del backend PostgreSQL correctamente
+          const mappedClasses = response.data.map((cls: any) => ({
+            id: cls.id,
+            name: cls.name, // Ya viene formateado como "Matemáticas 10°A"
+            subject: cls.subject,
+            classroom: cls.classroom,
+            studentCount: cls.studentCount || 0,
+            averageGrade: cls.averageGrade || 8.0, // Valor por defecto
+            nextClass: "Por programar", // Se puede mejorar con horarios
+            students: cls.students || [],
+            academicYear: cls.academicYear,
+            isCurrent: cls.isCurrent,
+            createdAt: cls.createdAt,
+            isActive: cls.isActive
+          }));
+          
+          setClasses(mappedClasses);
+          // Guardar en localStorage como respaldo
+          localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(mappedClasses));
+        } else {
+          throw new Error('No hay datos de clases');
         }
-      ];
-      setClasses(defaultClasses);
-      localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(defaultClasses));
-    }
+      } catch (error) {
+        console.error('Error loading teacher classes:', error);
+        // Si falla el API, cargar desde localStorage
+        const storedClasses = localStorage.getItem(`teacher_classes_${user?.id}`);
+        if (storedClasses) {
+          setClasses(JSON.parse(storedClasses));
+        } else {
+          // Si no hay datos guardados, mostrar lista vacía
+          setClasses([]);
+        }
+      }
+    };
+
+    loadTeacherClasses();
   }, [user?.id]);
 
   // Datos mock del docente
@@ -127,10 +122,46 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
     }
   ];
 
-  const handleAddClass = (classData: any) => {
-    const newClasses = [...classes, { ...classData, students: [] }];
-    setClasses(newClasses);
-    localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(newClasses));
+  const handleAddClass = async (classData: any) => {
+    try {
+      // El backend ahora requiere: subjectId, sectionId, teacherId, academicYearId, classroom
+      const newClassData = {
+        subjectId: classData.subjectId,
+        sectionId: classData.sectionId,
+        teacherId: user?.id,
+        academicYearId: classData.academicYearId,
+        classroom: classData.classroom || ""
+      };
+
+      const response = await apiClient.classes.createClass(newClassData);
+      
+      if (response.success && response.data) {
+        // Mapear la clase creada al formato esperado
+        const mappedClass = {
+          id: response.data.id,
+          name: response.data.name,
+          subject: response.data.subject,
+          classroom: response.data.classroom || "",
+          studentCount: 0,
+          averageGrade: 0,
+          nextClass: "Por programar",
+          students: [],
+          academicYear: response.data.academicYear,
+          isCurrent: response.data.isCurrent,
+          createdAt: response.data.createdAt,
+          isActive: response.data.isActive
+        };
+        
+        const newClasses = [...classes, mappedClass];
+        setClasses(newClasses);
+        localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(newClasses));
+      } else {
+        throw new Error('Error al crear clase en el servidor');
+      }
+    } catch (error) {
+      console.error('Error creating class:', error);
+      // No guardar localmente, el usuario debe intentar de nuevo con los datos correctos
+    }
   };
 
   const handleAddStudents = (students: any[]) => {

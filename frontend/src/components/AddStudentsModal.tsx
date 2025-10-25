@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { Card } from "../../../components/ui/card";
+import { Card } from "./ui/card";
 import { Separator } from "./ui/separator";
 import { toast } from "sonner";
 import { Download, Upload, Plus, Trash2 } from "lucide-react";
