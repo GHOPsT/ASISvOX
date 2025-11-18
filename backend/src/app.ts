@@ -13,6 +13,7 @@ import { authMiddleware } from './middleware/auth';
 // Importar rutas
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
+import entityRoutes from './routes/entity.routes';
 import teacherRoutes from './routes/teacher.routes';
 import studentRoutes from './routes/student.routes';
 import classRoutes from './routes/class.routes';
@@ -78,6 +79,7 @@ app.use('/api', authMiddleware);
 // ===============================
 
 app.use('/api/users', userRoutes);
+app.use('/api/entities', entityRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/classes', classRoutes);

@@ -3,6 +3,7 @@
 // ===============================
 
 import { 
+  Entity,
   User, 
   Teacher, 
   Student, 
@@ -18,6 +19,56 @@ import {
   ApiResponse,
   PaginatedResponse
 } from '../types';
+
+// ===============================
+// ENTITY MANAGEMENT
+// ===============================
+
+export interface EntityAPI {
+  // GET /api/entities
+  getEntities(filters?: EntityFilters): Promise<PaginatedResponse<Entity>>;
+  
+  // GET /api/entities/:id
+  getEntityById(id: string): Promise<ApiResponse<Entity>>;
+  
+  // POST /api/entities
+  createEntity(data: CreateEntityData): Promise<ApiResponse<Entity>>;
+  
+  // PUT /api/entities/:id
+  updateEntity(id: string, data: Partial<Entity>): Promise<ApiResponse<Entity>>;
+  
+  // DELETE /api/entities/:id
+  deleteEntity(id: string): Promise<ApiResponse<void>>;
+  
+  // POST /api/entities/:id/activate
+  activateEntity(id: string): Promise<ApiResponse<Entity>>;
+  
+  // POST /api/entities/:id/deactivate
+  deactivateEntity(id: string): Promise<ApiResponse<Entity>>;
+  
+  // GET /api/entities/:id/stats
+  getEntityStats(id: string): Promise<ApiResponse<any>>;
+}
+
+export interface EntityFilters {
+  status?: 'active' | 'inactive';
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateEntityData {
+  name: string;
+  code: string;
+  address?: string;
+  imageUrl?: string;
+  representativeName?: string;
+  representativePhone?: string;
+  representativeEmail?: string;
+  institutionalPhone?: string;
+  institutionalAddress?: string;
+  institutionalEmail?: string;
+}
 
 // ===============================
 // AUTH ENDPOINTS
@@ -65,7 +116,8 @@ export interface UserAPI {
 }
 
 export interface UserFilters {
-  role?: 'teacher' | 'admin' | 'student';
+  role?: 'admin_general' | 'admin_entity' | 'teacher' | 'student';
+  entityId?: string;
   status?: 'active' | 'inactive';
   search?: string;
   page?: number;
@@ -97,6 +149,7 @@ export interface TeacherAPI {
 }
 
 export interface TeacherFilters {
+  entityId?: string;
   subject?: string;
   status?: 'active' | 'inactive';
   search?: string;
@@ -177,6 +230,7 @@ export interface ClassAPI {
 }
 
 export interface ClassFilters {
+  entityId?: string;
   teacherId?: string;
   subject?: string;
   period?: string;
@@ -186,9 +240,10 @@ export interface ClassFilters {
 }
 
 export interface CreateClassData {
+  entityId: string;
   subjectId: string;
   sectionId: string;
-  teacherId: string;
+  teacherId?: string; // Opcional - si no se proporciona, se asigna al usuario actual (teacher)
   academicYearId: string;
   classroom?: string;
 }

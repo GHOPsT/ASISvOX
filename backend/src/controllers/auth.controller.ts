@@ -14,25 +14,52 @@ import { query } from '../config/connection';
 // FUNCIONES DE BASE DE DATOS
 // ===============================
 
+// Generar entity_id para teachers independientes
+// Formato: primeras 2 letras del nombre + primeras 2 letras del apellido + UUID corto
+const generateTeacherEntityId = (fullName: string, userId: string): string => {
+  // Extraer nombre y apellido
+  const parts = fullName.trim().split(' ');
+  const firstName = parts[0] || '';
+  const lastName = parts[parts.length - 1] || '';
+  
+  // Obtener primeras 2 letras (mayúsculas)
+  const firstInitials = firstName.substring(0, 2).toUpperCase();
+  const lastInitials = lastName.substring(0, 2).toUpperCase();
+  
+  // Usar primeros 8 caracteres del UUID
+  const shortId = userId.substring(0, 8);
+  
+  // Formato: INICIALESTEACHER-SHORTID
+  return `${firstInitials}${lastInitials}-${shortId}`;
+};
+
 // Buscar usuario por email
 const findUserByEmail = async (email: string) => {
   const result = await query(
-    'SELECT id, email, password_hash, full_name, role, phone, photo_url, is_active, created_at, updated_at, last_login FROM users WHERE email = $1',
+    'SELECT id, email, password_hash, full_name, role, entity_id, max_teachers_allowed, phone, photo_url, is_active, created_at, updated_at, last_login FROM users WHERE email = $1',
     [email]
   );
   return result.rows[0];
 };
 
 // Crear nuevo usuario
-const createUser = async (userData: RegisterData) => {
-  const { name, email, password, role } = userData;
+const createUser = async (userData: RegisterData, generatedEntityId?: string) => {
+  const { name, email, password, role, entityId } = userData;
   const hashedPassword = await bcrypt.hash(password, 12);
   
+  // Determinar el entity_id a usar
+  let finalEntityId = entityId;
+  
+  // Si es un teacher que se registra solo sin entityId, generar uno
+  if (role === 'teacher' && !entityId && generatedEntityId) {
+    finalEntityId = generatedEntityId;
+  }
+  
   const result = await query(
-    `INSERT INTO users (email, password_hash, full_name, role) 
-     VALUES ($1, $2, $3, $4) 
-     RETURNING id, email, full_name, role, phone, photo_url, is_active, created_at, updated_at`,
-    [email, hashedPassword, name, role]
+    `INSERT INTO users (email, password_hash, full_name, role, entity_id, max_teachers_allowed) 
+     VALUES ($1, $2, $3, $4, $5, $6) 
+     RETURNING id, email, full_name, role, entity_id, max_teachers_allowed, phone, photo_url, is_active, created_at, updated_at`,
+    [email, hashedPassword, name, role, finalEntityId || null, role === 'admin_entity' ? 0 : null]
   );
   
   return result.rows[0];
@@ -49,20 +76,29 @@ const updateLastLogin = async (userId: string) => {
 // Buscar usuario por ID
 const findUserById = async (userId: string) => {
   const result = await query(
-    'SELECT id, email, password_hash, full_name, role, phone, photo_url, is_active, created_at, updated_at, last_login FROM users WHERE id = $1',
+    'SELECT id, email, password_hash, full_name, role, entity_id, max_teachers_allowed, phone, photo_url, is_active, created_at, updated_at, last_login FROM users WHERE id = $1',
     [userId]
   );
   return result.rows[0];
 };
 
-// Generar JWT token
-const generateToken = (user: User): string => {
+// Generar JWT token - INCLUYE entityId
+const generateToken = (user: any): string => {
   const secret = process.env.JWT_SECRET || 'your-secret-key';
-  return jwt.sign({ userId: user.id, email: user.email, role: user.role }, secret, { expiresIn: '24h' });
+  return jwt.sign(
+    { 
+      userId: user.id, 
+      email: user.email, 
+      role: user.role,
+      entityId: user.entity_id || undefined
+    }, 
+    secret, 
+    { expiresIn: '24h' }
+  );
 };
 
 // Generar refresh token
-const generateRefreshToken = (user: User): string => {
+const generateRefreshToken = (user: any): string => {
   const secret = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key';
   return jwt.sign({ userId: user.id }, secret, { expiresIn: '7d' });
 };
@@ -71,7 +107,7 @@ const generateRefreshToken = (user: User): string => {
 // CONTROLADORES
 // ===============================
 
-// Login
+// Login - Soporta los 3 roles: admin_general, admin_entity, teacher
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const { email, password }: AuthCredentials = req.body;
 
@@ -93,6 +129,14 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     throw createError('Credenciales inválidas', 401);
   }
 
+  // ✅ NUEVA REGLA DE NEGOCIO: 
+  // - admin_entity SIEMPRE debe tener entity_id (creado por sistema)
+  // - teacher PUEDE ser independiente (auto-generado) o de una entidad
+  // Por lo tanto, solo validar admin_entity
+  if (dbUser.role === 'admin_entity' && !dbUser.entity_id) {
+    throw createError('Error: admin_entity debe tener una entidad asignada', 500);
+  }
+
   // Actualizar último login
   await updateLastLogin(dbUser.id);
 
@@ -101,15 +145,16 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     id: dbUser.id,
     name: dbUser.full_name,
     email: dbUser.email,
-    role: dbUser.role,
+    role: dbUser.role as 'admin_general' | 'admin_entity' | 'teacher',
+    entityId: dbUser.entity_id,
     status: dbUser.is_active ? 'active' : 'inactive',
     createdAt: new Date(dbUser.created_at),
     updatedAt: new Date(dbUser.updated_at),
   };
 
-  // Generar tokens
-  const token = generateToken(user);
-  const refreshToken = generateRefreshToken(user);
+  // Generar tokens - incluye entityId
+  const token = generateToken(dbUser);
+  const refreshToken = generateRefreshToken(dbUser);
 
   // Respuesta exitosa
   const authResponse: AuthResponse = {
@@ -129,13 +174,18 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   res.status(200).json(response);
 });
 
-// Register
+// Register - Solo para admin_entity y teacher
 export const register = asyncHandler(async (req: Request, res: Response) => {
-  const { name, email, password, role, subjects }: RegisterData = req.body;
+  const { name, email, password, role, entityId } = req.body;
 
   // Validación básica
   if (!name || !email || !password || !role) {
     throw createError('Todos los campos son requeridos', 400);
+  }
+
+  // REGLA: Solo admin_entity y teacher pueden auto-registrarse (no admin_general)
+  if (role === 'admin_general') {
+    throw createError('admin_general debe ser creado por el sistema', 403);
   }
 
   // Verificar si el usuario ya existe
@@ -144,23 +194,60 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     throw createError('El usuario ya existe', 409);
   }
 
+  // REGLA DE NEGOCIO: Generar entity_id para teachers independientes
+  let finalEntityId = entityId;
+  let generatedId: string | undefined = undefined;
+  
+  if (role === 'teacher') {
+    if (entityId) {
+      // Teacher creado por admin_entity: verificar que la entidad existe
+      const entityResult = await query('SELECT id FROM entities WHERE id = $1 AND is_active = true', [entityId]);
+      if (entityResult.rows.length === 0) {
+        throw createError('La entidad especificada no existe o está inactiva', 404);
+      }
+      finalEntityId = entityId;
+    } else {
+      // Teacher que se registra solo: generar entity_id con primeras 2 letras
+      // El ID será generado por la BD, así que generamos uno temporal aquí
+      generatedId = generateTeacherEntityId(name, email.split('@')[0]); // Usar email como base
+    }
+  } else if (role === 'admin_entity') {
+    // admin_entity DEBE tener entityId
+    if (!entityId) {
+      throw createError('entityId es requerido para admin_entity', 400);
+    }
+    // Verificar que la entidad existe
+    const entityResult = await query('SELECT id FROM entities WHERE id = $1 AND is_active = true', [entityId]);
+    if (entityResult.rows.length === 0) {
+      throw createError('La entidad especificada no existe o está inactiva', 404);
+    }
+    finalEntityId = entityId;
+  }
+
   // Crear nuevo usuario en la base de datos
-  const dbUser = await createUser({ name, email, password, role, subjects });
+  const dbUser = await createUser({ 
+    name, 
+    email, 
+    password, 
+    role: role as 'admin_entity' | 'teacher', 
+    entityId: finalEntityId 
+  }, generatedId);
 
   // Convertir formato de BD a formato de respuesta
   const newUser: User = {
     id: dbUser.id,
     name: dbUser.full_name,
     email: dbUser.email,
-    role: dbUser.role,
+    role: dbUser.role as 'admin_entity' | 'teacher',
+    entityId: dbUser.entity_id,
     status: dbUser.is_active ? 'active' : 'inactive',
     createdAt: new Date(dbUser.created_at),
     updatedAt: new Date(dbUser.updated_at),
   };
 
   // Generar tokens
-  const token = generateToken(newUser);
-  const refreshToken = generateRefreshToken(newUser);
+  const token = generateToken(dbUser);
+  const refreshToken = generateRefreshToken(dbUser);
 
   // Respuesta exitosa
   const authResponse: AuthResponse = {
@@ -219,15 +306,16 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
       id: dbUser.id,
       name: dbUser.full_name,
       email: dbUser.email,
-      role: dbUser.role,
+      role: dbUser.role as 'admin_general' | 'admin_entity' | 'teacher',
+      entityId: dbUser.entity_id,
       status: dbUser.is_active ? 'active' : 'inactive',
       createdAt: new Date(dbUser.created_at),
       updatedAt: new Date(dbUser.updated_at),
     };
 
     // Generar nuevos tokens
-    const newToken = generateToken(user);
-    const newRefreshToken = generateRefreshToken(user);
+    const newToken = generateToken(dbUser);
+    const newRefreshToken = generateRefreshToken(dbUser);
 
     // Respuesta exitosa
     const authResponse: AuthResponse = {
@@ -267,7 +355,8 @@ export const getCurrentUser = asyncHandler(async (req: AuthenticatedRequest, res
     id: dbUser.id,
     name: dbUser.full_name,
     email: dbUser.email,
-    role: dbUser.role,
+    role: dbUser.role as 'admin_general' | 'admin_entity' | 'teacher',
+    entityId: dbUser.entity_id,
     status: dbUser.is_active ? 'active' : 'inactive',
     createdAt: new Date(dbUser.created_at),
     updatedAt: new Date(dbUser.updated_at),

@@ -224,7 +224,7 @@ class ApiClient {
     },
 
     getTeacherClasses: async (id: string): Promise<ApiResponse<Class[]>> => {
-      return this.get<ApiResponse<Class[]>>(`/teachers/${id}/classes`);
+      return this.get<ApiResponse<Class[]>>(`/classes/teacher/${id}`);
     },
 
     getTeacherStudents: async (id: string): Promise<ApiResponse<Student[]>> => {
@@ -309,6 +309,26 @@ class ApiClient {
 
     removeStudentFromClass: async (classId: string, studentId: string): Promise<ApiResponse<void>> => {
       return this.delete<ApiResponse<void>>(`/classes/${classId}/students/${studentId}`);
+    },
+
+    // ===============================
+    // SCHEDULE METHODS
+    // ===============================
+
+    createSchedules: async (classId: string, schedules: any[]): Promise<ApiResponse<any>> => {
+      return this.post<ApiResponse<any>>(`/classes/${classId}/schedules`, { schedules });
+    },
+
+    getSchedules: async (classId: string): Promise<ApiResponse<any[]>> => {
+      return this.get<ApiResponse<any[]>>(`/classes/${classId}/schedules`);
+    },
+
+    updateSchedule: async (classId: string, scheduleId: string, data: any): Promise<ApiResponse<any>> => {
+      return this.put<ApiResponse<any>>(`/classes/${classId}/schedules/${scheduleId}`, data);
+    },
+
+    deleteSchedule: async (classId: string, scheduleId: string): Promise<ApiResponse<void>> => {
+      return this.delete<ApiResponse<void>>(`/classes/${classId}/schedules/${scheduleId}`);
     },
   };
 

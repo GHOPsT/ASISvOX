@@ -10,8 +10,9 @@ import { ApiResponse } from '../../../shared/types';
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
-    role: 'teacher' | 'admin' | 'student';
+    role: 'admin_general' | 'admin_entity' | 'teacher' | 'student';
     email: string;
+    entityId?: string;
   };
 }
 
@@ -49,6 +50,7 @@ export const authMiddleware = (
       id: decoded.userId,
       role: decoded.role,
       email: decoded.email,
+      entityId: decoded.entityId,
     };
 
     next();
@@ -103,6 +105,8 @@ export const requireRole = (roles: string[]) => {
 };
 
 // Middleware específicos por rol
-export const requireAdmin = requireRole(['admin']);
+export const requireAdminGeneral = requireRole(['admin_general']);
+export const requireAdminEntity = requireRole(['admin_entity']);
+export const requireAdmin = requireRole(['admin_general', 'admin_entity']);
 export const requireTeacher = requireRole(['teacher']);
-export const requireTeacherOrAdmin = requireRole(['teacher', 'admin']);
+export const requireTeacherOrAdmin = requireRole(['teacher', 'admin_general', 'admin_entity']);

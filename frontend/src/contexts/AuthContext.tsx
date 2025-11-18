@@ -9,6 +9,7 @@ interface User {
   email: string;
   name: string;
   role: 'teacher' | 'admin';
+  entityId?: string; // Para admin_entity y teachers
 }
 
 interface AuthContextType {
@@ -58,7 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role as 'teacher' | 'admin' // Asegurar que es teacher o admin
+          role: user.role as 'teacher' | 'admin', // Asegurar que es teacher o admin
+          entityId: user.entityId // Incluir entityId si existe
         };
         
         // Guardar usuario
@@ -97,7 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role as 'teacher' | 'admin'
+          role: user.role as 'teacher' | 'admin',
+          entityId: user.entityId // Incluir entityId si existe
         };
         
         // Guardar usuario

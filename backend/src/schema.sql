@@ -8,15 +8,42 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ============================================
+-- TABLA: entities
+-- Entidades/Instituciones educativas
+-- ============================================
+CREATE TABLE entities (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(100) UNIQUE NOT NULL,
+    address VARCHAR(500),
+    image_url TEXT,
+    representative_name VARCHAR(255),
+    representative_phone VARCHAR(20),
+    representative_email VARCHAR(255),
+    institutional_phone VARCHAR(20),
+    institutional_address VARCHAR(500),
+    institutional_email VARCHAR(255),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para entities
+CREATE INDEX idx_entities_code ON entities(code);
+CREATE INDEX idx_entities_is_active ON entities(is_active);
+
+-- ============================================
 -- TABLA: users
--- Usuarios del sistema (Administradores y Profesores)
+-- Usuarios del sistema (Admin General, Admin Entity, Profesores)
 -- ============================================
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'teacher')),
+    role VARCHAR(20) NOT NULL CHECK (role IN ('admin_general', 'admin_entity', 'teacher')),
+    entity_id UUID REFERENCES entities(id) ON DELETE SET NULL,
+    max_teachers_allowed INTEGER DEFAULT 0, -- Solo para admin_entity: límite de profesores que puede crear
     phone VARCHAR(20),
     photo_url TEXT,
     is_active BOOLEAN DEFAULT true,
@@ -28,6 +55,7 @@ CREATE TABLE users (
 -- Índices para users
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_entity_id ON users(entity_id);
 CREATE INDEX idx_users_is_active ON users(is_active);
 
 -- ============================================
@@ -107,22 +135,25 @@ CREATE INDEX idx_sections_is_active ON sections(is_active);
 
 -- ============================================
 -- TABLA: classes
--- Clases (Combinación de Sección + Materia + Profesor)
+-- Clases (Combinación de Sección + Materia + Profesor + Entidad)
 -- ============================================
 CREATE TABLE classes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    entity_id UUID NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
     section_id UUID NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
     subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     academic_year_id UUID NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE,
     classroom VARCHAR(100), -- Aula/Salón
+    weeks_duration INTEGER DEFAULT 52 NOT NULL, -- Duración en semanas (36-52)
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(section_id, subject_id, academic_year_id)
+    UNIQUE(section_id, subject_id, academic_year_id, entity_id)
 );
 
 -- Índices para classes
+CREATE INDEX idx_classes_entity_id ON classes(entity_id);
 CREATE INDEX idx_classes_section_id ON classes(section_id);
 CREATE INDEX idx_classes_subject_id ON classes(subject_id);
 CREATE INDEX idx_classes_teacher_id ON classes(teacher_id);
@@ -429,6 +460,7 @@ END;
 $$ language 'plpgsql';
 
 -- Aplicar trigger a todas las tablas con updated_at
+CREATE TRIGGER update_entities_updated_at BEFORE UPDATE ON entities FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_academic_years_updated_at BEFORE UPDATE ON academic_years FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_subjects_updated_at BEFORE UPDATE ON subjects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -471,6 +503,8 @@ WHERE e.status = 'active' AND ay.is_current = true;
 CREATE VIEW v_classes_full AS
 SELECT 
     c.id as class_id,
+    c.entity_id,
+    e.name as entity_name,
     sub.name as subject_name,
     sub.code as subject_code,
     sub.color as subject_color,
@@ -480,6 +514,7 @@ SELECT
     c.classroom,
     ay.name as academic_year
 FROM classes c
+JOIN entities e ON c.entity_id = e.id
 JOIN subjects sub ON c.subject_id = sub.id
 JOIN sections sec ON c.section_id = sec.id
 JOIN grades g ON sec.grade_id = g.id
@@ -508,6 +543,15 @@ GROUP BY s.id, s.first_name, s.last_name, c.id;
 -- DATOS INICIALES
 -- ============================================
 
+-- Crear entidad por defecto
+INSERT INTO entities (name, code, address, representative_name, representative_phone, representative_email, institutional_phone, institutional_address, institutional_email)
+VALUES ('Institución Principal', 'INST-001', 'Dirección Principal', 'Director General', '555-0000', 'director@institucion.com', '555-0001', 'Dirección Administrativa', 'contacto@institucion.com');
+
+-- Crear usuario administrador general por defecto
+-- Contraseña: admin123 (debe cambiarse en producción)
+INSERT INTO users (email, password_hash, full_name, role)
+VALUES ('admin@asisvox.com', crypt('admin123', gen_salt('bf')), 'Administrador General del Sistema', 'admin_general');
+
 -- Insertar tipos de evaluación predeterminados
 INSERT INTO assessment_types (name, description) VALUES
     ('Examen', 'Evaluación formal escrita u oral'),
@@ -517,11 +561,6 @@ INSERT INTO assessment_types (name, description) VALUES
     ('Quiz', 'Evaluación corta y rápida'),
     ('Trabajo en Grupo', 'Actividad colaborativa'),
     ('Presentación', 'Exposición oral de un tema');
-
--- Crear usuario administrador por defecto
--- Contraseña: admin123 (debe cambiarse en producción)
-INSERT INTO users (email, password_hash, full_name, role) VALUES
-    ('admin@asisvox.com', crypt('admin123', gen_salt('bf')), 'Administrador del Sistema', 'admin');
 
 -- Crear año académico actual
 INSERT INTO academic_years (name, start_date, end_date, is_current) VALUES
@@ -583,9 +622,10 @@ $$ LANGUAGE plpgsql;
 -- COMENTARIOS PARA DOCUMENTACIÓN
 -- ============================================
 
-COMMENT ON TABLE users IS 'Usuarios del sistema (administradores y profesores)';
+COMMENT ON TABLE entities IS 'Entidades/Instituciones educativas';
+COMMENT ON TABLE users IS 'Usuarios del sistema (admin_general, admin_entity, profesores)';
 COMMENT ON TABLE students IS 'Estudiantes registrados en el sistema';
-COMMENT ON TABLE classes IS 'Clases que combinan sección, materia y profesor';
+COMMENT ON TABLE classes IS 'Clases que combinan sección, materia, profesor y entidad';
 COMMENT ON TABLE attendance IS 'Registro diario de asistencia de estudiantes';
 COMMENT ON TABLE grades_records IS 'Calificaciones de estudiantes en evaluaciones';
 COMMENT ON TABLE homework IS 'Tareas y deberes asignados a estudiantes';

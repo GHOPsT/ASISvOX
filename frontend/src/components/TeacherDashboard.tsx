@@ -136,13 +136,14 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
         return;
       }
 
-      // El backend ahora requiere: subjectId, sectionId, teacherId, academicYearId, classroom
+      // El backend auto-asigna teacherId y entityId, solo enviar: subjectId, sectionId, academicYearId, classroom, weeksDuration
       const newClassData = {
         subjectId: classData.subjectId,
         sectionId: classData.sectionId,
-        teacherId: user.id,
         academicYearId: classData.academicYearId,
-        classroom: classData.classroom || ""
+        classroom: classData.classroom || "",
+        weeksDuration: classData.weeksDuration || 52
+        // NOTA: teacherId y entityId se asignan automáticamente en el backend
       };
 
       // Asegurarse de que el token está configurado
@@ -170,6 +171,19 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
           isActive: response.data.isActive
         };
         
+        // Si hay horarios, guardarlos
+        if (classData.schedules && classData.schedules.length > 0) {
+          try {
+            // Guardar horarios usando el nuevo endpoint
+            console.log('Guardando horarios:', classData.schedules);
+            await apiClient.classes.createSchedules(mappedClass.id, classData.schedules);
+            console.log('Horarios guardados exitosamente');
+          } catch (scheduleError) {
+            console.error('Error guardando horarios:', scheduleError);
+            // No es un error fatal, la clase se creó pero los horarios pueden no haberse guardado
+          }
+        }
+        
         const newClasses = [...classes, mappedClass];
         setClasses(newClasses);
         localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(newClasses));
@@ -178,7 +192,6 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
       }
     } catch (error) {
       console.error('Error creating class:', error);
-      // No guardar localmente, el usuario debe intentar de nuevo con los datos correctos
     }
   };
 
