@@ -261,32 +261,31 @@ export const getTeacherClasses = asyncHandler(async (req: Request, res: Response
   const classesResult = await query(
     `SELECT 
       c.id,
-      c.name,
-      sub.name as subject,
-      s.name as section,
-      g.name as grade,
       c.classroom,
+      c.is_active,
+      c.created_at,
+      sub.name as subject,
+      sec.name as section,
+      gr.name as grade,
       ay.name as academic_year,
       COUNT(DISTINCT e.student_id) as student_count,
-      COALESCE(AVG(gr.score), 0) as average_grade,
-      c.is_active,
-      c.created_at
+      COALESCE(AVG(grc.score), 0) as average_grade
     FROM classes c
     LEFT JOIN subjects sub ON c.subject_id = sub.id
-    LEFT JOIN sections s ON c.section_id = s.id
-    LEFT JOIN grades g ON s.grade_id = g.id
+    LEFT JOIN sections sec ON c.section_id = sec.id
+    LEFT JOIN grades gr ON sec.grade_id = gr.id
     LEFT JOIN academic_years ay ON c.academic_year_id = ay.id
-    LEFT JOIN enrollments e ON c.id = e.class_id
-    LEFT JOIN grades gr ON e.student_id = gr.student_id AND c.id = gr.class_id
+    LEFT JOIN enrollments e ON sec.id = e.section_id AND e.academic_year_id = c.academic_year_id
+    LEFT JOIN grades_records grc ON e.student_id = grc.student_id
     WHERE c.teacher_id = $1 AND c.is_active = true
-    GROUP BY c.id, sub.name, s.name, g.name, ay.name
+    GROUP BY c.id, sub.name, sec.name, gr.name, ay.name
     ORDER BY c.created_at DESC`,
     [id]
   );
 
   const teacherClasses = classesResult.rows.map((row: any) => ({
     id: row.id,
-    name: row.name,
+    name: `${row.grade}° ${row.section} - ${row.subject}`,
     subject: row.subject,
     section: row.section,
     grade: row.grade,

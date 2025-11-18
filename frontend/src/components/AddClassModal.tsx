@@ -47,7 +47,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
     startTime: "",
     endTime: "",
     selectedDays: [] as string[],
-    weeks: 1,
+    weeks: "",
     description: ""
   });
 
@@ -71,6 +71,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
     const newClass = {
       id: Date.now().toString(),
       ...formData,
+      weeks: formData.weeks ? parseInt(formData.weeks) : 1,
       studentCount: 0,
       averageGrade: 0,
       createdAt: new Date().toISOString()
@@ -86,7 +87,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
       startTime: "",
       endTime: "",
       selectedDays: [],
-      weeks: 1,
+      weeks: "",
       description: ""
     });
     
@@ -103,7 +104,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
       startTime: "",
       endTime: "",
       selectedDays: [],
-      weeks: 1,
+      weeks: "",
       description: ""
     });
     onClose();
@@ -210,7 +211,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
               min="1"
               max="52"
               value={formData.weeks}
-              onChange={(e) => setFormData(prev => ({ ...prev, weeks: parseInt(e.target.value) || 1 }))}
+              onChange={(e) => setFormData(prev => ({ ...prev, weeks: e.target.value }))}
             />
           </div>
 
@@ -226,10 +227,10 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={handleClose} className="flex-1">
+            <Button type="button" variant="outline" onClick={handleClose} className="flex-1 border-2 border-slate-300 dark:border-slate-600 hover:shadow-md hover:shadow-slate-400/30 dark:hover:shadow-slate-800/50 transition-all">
               Cancelar
             </Button>
-            <Button type="submit" className="flex-1">
+            <Button type="submit" className="flex-1 border-2 border-primary hover:shadow-lg hover:shadow-primary/30 transition-all">
               Crear Clase
             </Button>
           </div>
