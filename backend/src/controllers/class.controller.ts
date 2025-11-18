@@ -441,6 +441,12 @@ export const getClassStudents = asyncHandler(async (req: AuthenticatedRequest, r
 export const getTeacherClasses = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { teacherId } = req.params;
 
+  // REGLA: Un teacher solo puede ver sus propias clases
+  // Un admin_general o admin_entity puede ver las clases de cualquier teacher
+  if (req.user?.role === 'teacher' && req.user.id !== teacherId) {
+    throw createError('No tienes permisos para acceder a este recurso', 403);
+  }
+
   // Verificar que el docente existe
   const teacherResult = await query(
     `SELECT id, full_name, email, role, entity_id
@@ -459,7 +465,7 @@ export const getTeacherClasses = asyncHandler(async (req: AuthenticatedRequest, 
   const classesQuery = `
     SELECT 
       c.id, c.entity_id, c.section_id, c.subject_id, c.teacher_id, 
-      c.academic_year_id, c.classroom, c.is_active, c.created_at, c.updated_at,
+      c.academic_year_id, c.classroom, c.weeks_duration, c.is_active, c.created_at, c.updated_at,
       sub.name as subject_name, sub.code as subject_code,
       sec.name as section_name, g.name as grade_name,
       ay.name as academic_year_name, ay.is_current,

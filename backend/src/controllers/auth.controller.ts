@@ -43,23 +43,15 @@ const findUserByEmail = async (email: string) => {
 };
 
 // Crear nuevo usuario
-const createUser = async (userData: RegisterData, generatedEntityId?: string) => {
+const createUser = async (userData: RegisterData) => {
   const { name, email, password, role, entityId } = userData;
   const hashedPassword = await bcrypt.hash(password, 12);
-  
-  // Determinar el entity_id a usar
-  let finalEntityId = entityId;
-  
-  // Si es un teacher que se registra solo sin entityId, generar uno
-  if (role === 'teacher' && !entityId && generatedEntityId) {
-    finalEntityId = generatedEntityId;
-  }
   
   const result = await query(
     `INSERT INTO users (email, password_hash, full_name, role, entity_id, max_teachers_allowed) 
      VALUES ($1, $2, $3, $4, $5, $6) 
      RETURNING id, email, full_name, role, entity_id, max_teachers_allowed, phone, photo_url, is_active, created_at, updated_at`,
-    [email, hashedPassword, name, role, finalEntityId || null, role === 'admin_entity' ? 0 : null]
+    [email, hashedPassword, name, role, entityId || null, role === 'admin_entity' ? 0 : null]
   );
   
   return result.rows[0];
@@ -196,7 +188,6 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
   // REGLA DE NEGOCIO: Generar entity_id para teachers independientes
   let finalEntityId = entityId;
-  let generatedId: string | undefined = undefined;
   
   if (role === 'teacher') {
     if (entityId) {
@@ -207,9 +198,8 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
       }
       finalEntityId = entityId;
     } else {
-      // Teacher que se registra solo: generar entity_id con primeras 2 letras
-      // El ID será generado por la BD, así que generamos uno temporal aquí
-      generatedId = generateTeacherEntityId(name, email.split('@')[0]); // Usar email como base
+      // Teacher que se registra solo: usar NULL temporalmente, se genera después
+      finalEntityId = null;
     }
   } else if (role === 'admin_entity') {
     // admin_entity DEBE tener entityId
@@ -231,7 +221,14 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     password, 
     role: role as 'admin_entity' | 'teacher', 
     entityId: finalEntityId 
-  }, generatedId);
+  });
+
+  // Si es un teacher independiente, generar y actualizar entity_id con el ID real del usuario
+  if (role === 'teacher' && !entityId) {
+    const generatedEntityId = generateTeacherEntityId(name, dbUser.id);
+    await query('UPDATE users SET entity_id = $1 WHERE id = $2', [generatedEntityId, dbUser.id]);
+    dbUser.entity_id = generatedEntityId;
+  }
 
   // Convertir formato de BD a formato de respuesta
   const newUser: User = {

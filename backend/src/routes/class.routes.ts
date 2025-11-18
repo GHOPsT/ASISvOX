@@ -34,8 +34,8 @@ router.delete('/:id', requireTeacherOrAdmin, deleteClass);
 // Obtener estudiantes de una clase
 router.get('/:id/students', requireTeacherOrAdmin, getClassStudents);
 
-// Obtener clases de un docente específico
-router.get('/teacher/:teacherId', requireAdmin, getTeacherClasses);
+// Obtener clases de un docente específico (el teacher puede ver sus propias clases)
+router.get('/teacher/:teacherId', requireTeacherOrAdmin, getTeacherClasses);
 
 // ===============================
 // RUTAS DE HORARIOS
