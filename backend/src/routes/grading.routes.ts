@@ -1,12 +1,24 @@
 import { Router } from 'express';
 import { requireTeacherOrAdmin } from '../middleware/auth';
+import {
+  getGrades,
+  getGrade,
+  recordGrade,
+  recordGradesBulk,
+  updateGrade,
+  deleteGrade,
+  getGradeStatistics,
+} from '../controllers/grading.controller';
 
 const router = Router();
 
-router.get('/', requireTeacherOrAdmin, (req, res) => res.json({ message: 'Get grades' }));
-router.post('/', requireTeacherOrAdmin, (req, res) => res.json({ message: 'Record grade' }));
-router.post('/bulk', requireTeacherOrAdmin, (req, res) => res.json({ message: 'Record grades bulk' }));
-router.put('/:id', requireTeacherOrAdmin, (req, res) => res.json({ message: `Update grade ${req.params.id}` }));
-router.delete('/:id', requireTeacherOrAdmin, (req, res) => res.json({ message: `Delete grade ${req.params.id}` }));
+// Grades CRUD
+router.get('/', requireTeacherOrAdmin, getGrades);
+router.get('/statistics', requireTeacherOrAdmin, getGradeStatistics);
+router.get('/:gradeId', requireTeacherOrAdmin, getGrade);
+router.post('/', requireTeacherOrAdmin, recordGrade);
+router.post('/bulk', requireTeacherOrAdmin, recordGradesBulk);
+router.put('/:gradeId', requireTeacherOrAdmin, updateGrade);
+router.delete('/:gradeId', requireTeacherOrAdmin, deleteGrade);
 
 export default router;

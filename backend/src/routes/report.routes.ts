@@ -1,12 +1,20 @@
 import { Router } from 'express';
 import { requireTeacherOrAdmin } from '../middleware/auth';
+import {
+  getReports,
+  getReport,
+  createReport,
+  updateReport,
+  deleteReport,
+} from '../controllers/report.controller';
 
 const router = Router();
 
-router.get('/', requireTeacherOrAdmin, (req, res) => res.json({ message: 'Get reports' }));
-router.post('/generate', requireTeacherOrAdmin, (req, res) => res.json({ message: 'Generate report' }));
-router.get('/:id', requireTeacherOrAdmin, (req, res) => res.json({ message: `Get report ${req.params.id}` }));
-router.get('/:id/download', requireTeacherOrAdmin, (req, res) => res.json({ message: `Download report ${req.params.id}` }));
-router.delete('/:id', requireTeacherOrAdmin, (req, res) => res.json({ message: `Delete report ${req.params.id}` }));
+// Reports CRUD
+router.get('/', requireTeacherOrAdmin, getReports);
+router.get('/:reportId', requireTeacherOrAdmin, getReport);
+router.post('/', requireTeacherOrAdmin, createReport);
+router.put('/:reportId', requireTeacherOrAdmin, updateReport);
+router.delete('/:reportId', requireTeacherOrAdmin, deleteReport);
 
 export default router;

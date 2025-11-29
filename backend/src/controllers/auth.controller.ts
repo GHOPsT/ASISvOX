@@ -14,25 +14,6 @@ import { query } from '../config/connection';
 // FUNCIONES DE BASE DE DATOS
 // ===============================
 
-// Generar entity_id para teachers independientes
-// Formato: primeras 2 letras del nombre + primeras 2 letras del apellido + UUID corto
-const generateTeacherEntityId = (fullName: string, userId: string): string => {
-  // Extraer nombre y apellido
-  const parts = fullName.trim().split(' ');
-  const firstName = parts[0] || '';
-  const lastName = parts[parts.length - 1] || '';
-  
-  // Obtener primeras 2 letras (mayúsculas)
-  const firstInitials = firstName.substring(0, 2).toUpperCase();
-  const lastInitials = lastName.substring(0, 2).toUpperCase();
-  
-  // Usar primeros 8 caracteres del UUID
-  const shortId = userId.substring(0, 8);
-  
-  // Formato: INICIALESTEACHER-SHORTID
-  return `${firstInitials}${lastInitials}-${shortId}`;
-};
-
 // Buscar usuario por email
 const findUserByEmail = async (email: string) => {
   const result = await query(
@@ -223,11 +204,12 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     entityId: finalEntityId 
   });
 
-  // Si es un teacher independiente, generar y actualizar entity_id con el ID real del usuario
+  // Si es un teacher independiente, dejar entity_id como NULL (se puede crear una entidad después)
+  // No asignamos entity_id aquí porque no existe una entidad correspondiente
+  // Los teachers independientes pueden operar sin entidad asignada
   if (role === 'teacher' && !entityId) {
-    const generatedEntityId = generateTeacherEntityId(name, dbUser.id);
-    await query('UPDATE users SET entity_id = $1 WHERE id = $2', [generatedEntityId, dbUser.id]);
-    dbUser.entity_id = generatedEntityId;
+    // entity_id permanece NULL - esto es válido en el schema
+    dbUser.entity_id = null;
   }
 
   // Convertir formato de BD a formato de respuesta

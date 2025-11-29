@@ -15,6 +15,7 @@ const mockTeachers: Teacher[] = [
     name: 'Prof. María González',
     email: 'maria.gonzalez@asisVox.com',
     role: 'teacher',
+    entityId: 'default-entity',
     status: 'active',
     subjects: ['Matemáticas', 'Álgebra'],
     classes: ['1', '2', '3', '4'],
@@ -46,12 +47,13 @@ const mockTeachers: Teacher[] = [
         { time: '9:00-10:30', subject: 'Cálculo', class: '12°A', classId: '4' }
       ]
     }
-  },
+  } as Teacher,
   {
     id: '2',
     name: 'Prof. Carlos Ruiz',
     email: 'carlos.ruiz@asisVox.com',
     role: 'teacher',
+    entityId: 'default-entity',
     status: 'active',
     subjects: ['Física', 'Química'],
     classes: ['5', '6', '7'],
@@ -78,12 +80,13 @@ const mockTeachers: Teacher[] = [
         { time: '9:30-11:00', subject: 'Física', class: '11°A', classId: '5' }
       ]
     }
-  },
+  } as Teacher,
   {
     id: '3',
     name: 'Prof. Ana López',
     email: 'ana.lopez@asisVox.com',
     role: 'teacher',
+    entityId: 'default-entity',
     status: 'active',
     subjects: ['Historia', 'Geografía'],
     classes: ['8', '9', '10'],
@@ -110,7 +113,7 @@ const mockTeachers: Teacher[] = [
         { time: '15:30-17:00', subject: 'Historia', class: '11°C', classId: '10' }
       ]
     }
-  }
+  } as Teacher
 ];
 
 // Mock data de clases
@@ -120,13 +123,14 @@ const mockClasses: Class[] = [
     name: 'Matemáticas 10°A',
     subject: 'Matemáticas',
     teacherId: '1',
+    entityId: 'default-entity',
     students: ['1', '2', '3', '4', '5'],
     schedule: 'Lun, Mié, Vie - 8:00 AM',
     period: '2024-1',
     academicYear: '2024',
     createdAt: new Date('2024-01-15'),
     updatedAt: new Date('2024-01-15'),
-  },
+  } as Class,
   // ... más clases mock
 ];
 

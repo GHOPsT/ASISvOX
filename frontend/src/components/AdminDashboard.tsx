@@ -14,7 +14,8 @@ import {
   ClipboardList,
   UserPlus,
   BarChart3,
-  CalendarCheck
+  CalendarCheck,
+  Building2
 } from "lucide-react";
 import { TeacherListView } from "./admin/TeacherListView";
 import { TeacherCalendarView } from "./admin/TeacherCalendarView";
@@ -22,8 +23,9 @@ import { TeacherGradesView } from "./admin/TeacherGradesView";
 import { UserManagement } from "./admin/UserManagement";
 import { StatisticsView } from "./admin/StatisticsView";
 import { TeacherAssignmentManager } from "./admin/TeacherAssignmentManager";
+import { EntityManagement } from "./admin/EntityManagement";
 
-type AdminView = "overview" | "teachers" | "calendar" | "grades" | "users" | "statistics" | "assignments";
+type AdminView = "overview" | "teachers" | "calendar" | "grades" | "users" | "statistics" | "assignments" | "entities";
 
 export function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -109,6 +111,8 @@ export function AdminDashboard() {
         return <StatisticsView onBack={() => setCurrentView("overview")} />;
       case "assignments":
         return <TeacherAssignmentManager onBack={() => setCurrentView("overview")} />;
+      case "entities":
+        return <EntityManagement onBack={() => setCurrentView("overview")} />;
       default:
         return (
           <div className="p-4 space-y-6">
@@ -193,6 +197,23 @@ export function AdminDashboard() {
                     <div className="text-left">
                       <p className="font-medium">Gestión de Usuarios</p>
                       <p className="text-sm text-muted-foreground">Crear profesores y administradores</p>
+                    </div>
+                  </div>
+                  <Eye className="h-5 w-5 text-muted-foreground" />
+                </Button>
+
+                <Button 
+                  variant="outline" 
+                  className="w-full h-16 flex items-center justify-between p-4"
+                  onClick={() => setCurrentView("entities")}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-cyan-100 rounded-lg flex items-center justify-center">
+                      <Building2 className="h-5 w-5 text-cyan-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium">Gestión de Entidades</p>
+                      <p className="text-sm text-muted-foreground">Crear y administrar instituciones educativas</p>
                     </div>
                   </div>
                   <Eye className="h-5 w-5 text-muted-foreground" />

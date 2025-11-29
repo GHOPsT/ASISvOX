@@ -4,12 +4,37 @@
 -- ============================================
 
 -- ============================================
--- 1. INSERTAR PROFESOR DE PRUEBA
+-- 1. CREAR ENTIDAD DE PRUEBA
+-- ============================================
+
+INSERT INTO entities (name, code, address, representative_name, representative_phone, representative_email, institutional_phone, institutional_address, institutional_email)
+SELECT 'Instituto de Prueba', 'INS_TEST', 'Calle Test 123', 'Director Test', '555-0001', 'director@test.com', '555-0002', 'Calle Test 123', 'inst@test.com'
+WHERE NOT EXISTS (SELECT 1 FROM entities WHERE code = 'INS_TEST');
+
+-- ============================================
+-- 2. INSERTAR ADMIN GENERAL
 -- ============================================
 
 INSERT INTO users (email, password_hash, full_name, role) 
-SELECT 'profesor@asisVox.com', crypt('demo123', gen_salt('bf')), 'Prof. María González', 'teacher'
-WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'profesor@asisVox.com');
+SELECT 'admin@asisvox.com', crypt('Admin123!', gen_salt('bf')), 'Admin General', 'admin_general'
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@asisvox.com');
+
+-- ============================================
+-- 3. INSERTAR PROFESOR DE PRUEBA CON ENTIDAD
+-- ============================================
+
+DO $$
+DECLARE
+    v_entity_id UUID;
+BEGIN
+    -- Obtener ID de la entidad de prueba
+    SELECT id INTO v_entity_id FROM entities WHERE code = 'INS_TEST' LIMIT 1;
+    
+    -- Insertar profesor con entity_id
+    INSERT INTO users (email, password_hash, full_name, role, entity_id) 
+    SELECT 'profesor@asisVox.com', crypt('demo123', gen_salt('bf')), 'Prof. María González', 'teacher', v_entity_id
+    WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'profesor@asisVox.com');
+END $$;
 
 -- ============================================
 -- 2. OBTENER IDs NECESARIAS
@@ -119,6 +144,41 @@ INSERT INTO students (first_name, last_name, identification_number, date_of_birt
     ('Ana', 'Martínez', '12345681', '2009-11-05', 'female', true),
     ('Luis', 'Rodríguez', '12345682', '2009-02-28', 'male', true)
 ON CONFLICT (identification_number) DO NOTHING;
+
+-- Inscribir estudiantes en las secciones
+DO $$
+DECLARE
+    v_section_a_id UUID;
+    v_academic_year_id UUID;
+    v_student_id UUID;
+    v_student_ids UUID[];
+BEGIN
+    -- Obtener las IDs necesarias
+    SELECT id INTO v_academic_year_id FROM academic_years WHERE is_current = true LIMIT 1;
+    SELECT id INTO v_section_a_id FROM sections 
+    WHERE grade_id = (SELECT id FROM grades WHERE level = 10)
+    AND name = 'A' AND academic_year_id = v_academic_year_id LIMIT 1;
+    
+    -- Obtener IDs de estudiantes
+    SELECT ARRAY_AGG(id) INTO v_student_ids FROM students 
+    WHERE identification_number IN ('12345678', '12345679', '12345680', '12345681', '12345682');
+    
+    -- Inscribir cada estudiante
+    IF v_student_ids IS NOT NULL THEN
+        FOREACH v_student_id IN ARRAY v_student_ids
+        LOOP
+            INSERT INTO enrollments (student_id, section_id, academic_year_id, status, enrollment_date)
+            SELECT v_student_id, v_section_a_id, v_academic_year_id, 'active', CURRENT_DATE
+            WHERE NOT EXISTS (
+                SELECT 1 FROM enrollments 
+                WHERE student_id = v_student_id 
+                AND section_id = v_section_a_id
+            );
+        END LOOP;
+    END IF;
+    
+    RAISE NOTICE 'Estudiantes inscritos exitosamente';
+END $$;
 
 -- ============================================
 -- 4. VERIFICACIÓN FINAL

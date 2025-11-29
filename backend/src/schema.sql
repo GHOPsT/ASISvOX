@@ -392,17 +392,24 @@ CREATE INDEX idx_notifications_created_at ON notifications(created_at);
 -- ============================================
 CREATE TABLE reports (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
-    type VARCHAR(50) NOT NULL, -- 'attendance', 'grades', 'performance', etc.
-    format VARCHAR(20) NOT NULL CHECK (format IN ('pdf', 'excel', 'csv')),
+    report_type VARCHAR(50) NOT NULL, -- 'attendance', 'grades', 'performance', etc.
+    type VARCHAR(50) NOT NULL, -- Alias para compatibilidad
+    format VARCHAR(20) DEFAULT 'pdf' CHECK (format IN ('pdf', 'excel', 'csv')),
+    data JSONB, -- Datos del reporte en formato JSON
     filters JSONB, -- Filtros aplicados al reporte
     file_url TEXT,
     generated_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Índices para reports
+CREATE INDEX idx_reports_class_id ON reports(class_id);
 CREATE INDEX idx_reports_type ON reports(type);
+CREATE INDEX idx_reports_report_type ON reports(report_type);
 CREATE INDEX idx_reports_generated_by ON reports(generated_by);
 CREATE INDEX idx_reports_created_at ON reports(created_at);
 

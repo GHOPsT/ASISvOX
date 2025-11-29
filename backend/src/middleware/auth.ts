@@ -53,7 +53,7 @@ export const authMiddleware = (
       entityId: decoded.entityId,
     };
 
-    next();
+    return next();
   } catch (error) {
     console.error('Auth middleware error:', error);
     
@@ -100,7 +100,7 @@ export const requireRole = (roles: string[]) => {
       } as ApiResponse);
     }
 
-    next();
+    return next();
   };
 };
 

@@ -55,40 +55,66 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
     setIsLoading(true);
     try {
       const token = tokenService.getToken();
-      if (token) {
-        apiClient.setToken(token);
+      if (!token) {
+        console.error('No token found');
+        throw new Error('No token found');
       }
 
-      // Datos mock (próximamente conectar a endpoints reales)
+      // Cargar datos reales del backend
+      console.log('Loading form data from API...');
+      
+      const [subjectsRes, sectionsRes, yearsRes] = await Promise.all([
+        fetch('http://localhost:3001/api/master/subjects', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('http://localhost:3001/api/master/sections', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('http://localhost:3001/api/master/academic-years', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+
+      console.log('Responses:', { subjectsRes: subjectsRes.status, sectionsRes: sectionsRes.status, yearsRes: yearsRes.status });
+
+      if (!subjectsRes.ok || !sectionsRes.ok || !yearsRes.ok) {
+        throw new Error(`API error: subjects=${subjectsRes.status}, sections=${sectionsRes.status}, years=${yearsRes.status}`);
+      }
+
+      const subjectsData = await subjectsRes.json();
+      const sectionsData = await sectionsRes.json();
+      const yearsData = await yearsRes.json();
+
+      console.log('Data received:', { subjects: subjectsData.data?.length, sections: sectionsData.data?.length, years: yearsData.data?.length });
+
+      setSubjects(subjectsData.data || []);
+      setSections(sectionsData.data || []);
+      setAcademicYears(yearsData.data || []);
+    } catch (error) {
+      console.error('Error loading form data:', error);
+      toast.error(`Error al cargar datos: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Fallback a mock data si falla
+      console.log('Using mock data as fallback');
       const mockSubjects = [
         { id: "1", name: "Matemáticas" },
         { id: "2", name: "Física" },
         { id: "3", name: "Química" },
-        { id: "4", name: "Biología" },
-        { id: "5", name: "Historia" },
-        { id: "6", name: "Geografía" },
-        { id: "7", name: "Literatura" },
-        { id: "8", name: "Inglés" }
       ];
 
       const mockSections = [
         { id: "sec1", name: "10°A" },
         { id: "sec2", name: "10°B" },
-        { id: "sec3", name: "11°A" },
-        { id: "sec4", name: "11°B" }
       ];
 
       const mockAcademicYears = [
-        { id: "ay1", name: "2025", year: 2025 },
-        { id: "ay2", name: "2026", year: 2026 }
+        { id: "ay1", name: "2025" },
+        { id: "ay2", name: "2026" }
       ];
 
       setSubjects(mockSubjects);
       setSections(mockSections);
       setAcademicYears(mockAcademicYears);
-    } catch (error) {
-      console.error('Error loading form data:', error);
-      toast.error("Error al cargar datos del formulario");
     } finally {
       setIsLoading(false);
     }
@@ -172,7 +198,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
       sectionId: "",
       academicYearId: "",
       classroom: "",
-      weeksDuration: 52,
+      weeksDuration: 0,
       schedules: []
     });
     
@@ -186,7 +212,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
       sectionId: "",
       academicYearId: "",
       classroom: "",
-      weeksDuration: 52,
+      weeksDuration: 0,
       schedules: []
     });
     onClose();

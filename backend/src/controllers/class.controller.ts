@@ -55,7 +55,17 @@ const mapClassToResponse = (dbClass: any): Class => {
       id: dbClass.teacher_id,
       name: dbClass.teacher_name,
       email: dbClass.teacher_email,
-    },
+      role: 'teacher',
+      entityId: dbClass.entity_id,
+      status: 'active',
+      subjects: [dbClass.subject_name],
+      classes: [dbClass.id],
+      totalStudents: 0,
+      lastActivity: new Date(),
+      schedule: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as any,
     students: [],
     classroom: dbClass.classroom,
     weeksDuration: dbClass.weeks_duration || 52,
@@ -199,15 +209,15 @@ export const getClassById = asyncHandler(async (req: AuthenticatedRequest, res: 
 
 // POST - Crear clase (⭐ AUTO-ASIGNACIÓN PARA TEACHERS)
 export const createClass = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { subjectId, sectionId, academicYearId, classroom, weeksDuration } = req.body;
+  const { subject_id, section_id, academic_year_id, classroom, weeks_duration } = req.body;
 
   // Validaciones básicas
-  if (!subjectId || !sectionId || !academicYearId) {
-    throw createError('subjectId, sectionId y academicYearId son requeridos', 400);
+  if (!subject_id || !section_id || !academic_year_id) {
+    throw createError('subject_id, section_id y academic_year_id son requeridos', 400);
   }
 
-  // Validar weeksDuration si se proporciona
-  const weeksValue = weeksDuration ? parseInt(weeksDuration, 10) : 52;
+  // Validar weeks_duration si se proporciona
+  const weeksValue = weeks_duration ? parseInt(weeks_duration, 10) : 52;
   if (isNaN(weeksValue) || weeksValue < 1 || weeksValue > 52) {
     throw createError('weeksDuration debe ser un número entre 1 y 52', 400);
   }
@@ -228,7 +238,7 @@ export const createClass = asyncHandler(async (req: AuthenticatedRequest, res: R
      FROM sections sec
      JOIN grades g ON sec.grade_id = g.id
      WHERE sec.id = $1 AND sec.academic_year_id = $2`,
-    [sectionId, academicYearId]
+    [section_id, academic_year_id]
   );
 
   if (sectionResult.rows.length === 0) {
@@ -236,13 +246,13 @@ export const createClass = asyncHandler(async (req: AuthenticatedRequest, res: R
   }
 
   // Validar que la materia existe
-  const subjectResult = await query('SELECT id FROM subjects WHERE id = $1 AND is_active = true', [subjectId]);
+  const subjectResult = await query('SELECT id FROM subjects WHERE id = $1 AND is_active = true', [subject_id]);
   if (subjectResult.rows.length === 0) {
     throw createError('Materia no encontrada o no está activa', 404);
   }
 
   // Validar que el año académico existe
-  const yearResult = await query('SELECT id FROM academic_years WHERE id = $1', [academicYearId]);
+  const yearResult = await query('SELECT id FROM academic_years WHERE id = $1', [academic_year_id]);
   if (yearResult.rows.length === 0) {
     throw createError('Año académico no encontrado', 404);
   }
@@ -255,7 +265,7 @@ export const createClass = asyncHandler(async (req: AuthenticatedRequest, res: R
       `INSERT INTO classes (section_id, subject_id, teacher_id, academic_year_id, entity_id, classroom, weeks_duration, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7, true)
        RETURNING id, entity_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active, created_at, updated_at`,
-      [sectionId, subjectId, req.user.id, academicYearId, req.user.entityId, classroom || null, weeksValue]
+      [section_id, subject_id, req.user.id, academic_year_id, req.user.entityId, classroom || null, weeksValue]
     );
 
     if (createResult.rows.length === 0) {
