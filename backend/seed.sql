@@ -37,6 +37,50 @@ BEGIN
 END $$;
 
 -- ============================================
+-- 3B. INSERTAR PROFESORES INDEPENDIENTES
+-- ============================================
+
+DO $$
+DECLARE
+    v_independent_entity_id UUID;
+    v_teacher_id UUID;
+BEGIN
+    -- Crear entidad para Prof. Juan Independiente
+    INSERT INTO entities (name, code, address, representative_email, is_active)
+    SELECT 'Prof. Juan Rodríguez - Independiente', 'PROF_JUAN_IND', 'Dirección Personal', 'juan.independiente@mail.com', true
+    WHERE NOT EXISTS (SELECT 1 FROM entities WHERE code = 'PROF_JUAN_IND')
+    RETURNING id INTO v_independent_entity_id;
+    
+    -- Si no se creó, obtenerla
+    IF v_independent_entity_id IS NULL THEN
+        SELECT id INTO v_independent_entity_id FROM entities WHERE code = 'PROF_JUAN_IND';
+    END IF;
+    
+    -- Insertar profesor independiente con su entidad
+    INSERT INTO users (email, password_hash, full_name, role, entity_id)
+    SELECT 'juan.independiente@mail.com', crypt('Juan123!', gen_salt('bf')), 'Prof. Juan Rodríguez', 'teacher', v_independent_entity_id
+    WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'juan.independiente@mail.com');
+    
+    -- Crear entidad para Prof. Ana Independiente
+    INSERT INTO entities (name, code, address, representative_email, is_active)
+    SELECT 'Prof. Ana Martínez - Independiente', 'PROF_ANA_IND', 'Dirección Personal', 'ana.independiente@mail.com', true
+    WHERE NOT EXISTS (SELECT 1 FROM entities WHERE code = 'PROF_ANA_IND')
+    RETURNING id INTO v_independent_entity_id;
+    
+    -- Si no se creó, obtenerla
+    IF v_independent_entity_id IS NULL THEN
+        SELECT id INTO v_independent_entity_id FROM entities WHERE code = 'PROF_ANA_IND';
+    END IF;
+    
+    -- Insertar segunda profesora independiente
+    INSERT INTO users (email, password_hash, full_name, role, entity_id)
+    SELECT 'ana.independiente@mail.com', crypt('Ana123!', gen_salt('bf')), 'Prof. Ana Martínez', 'teacher', v_independent_entity_id
+    WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'ana.independiente@mail.com');
+    
+    RAISE NOTICE 'Profesores independientes creados exitosamente';
+END $$;
+
+-- ============================================
 -- 2. OBTENER IDs NECESARIAS
 -- ============================================
 
@@ -46,16 +90,24 @@ END $$;
 DO $$
 DECLARE
     v_teacher_id UUID;
+    v_teacher_juan_id UUID;
+    v_teacher_ana_id UUID;
     v_academic_year_id UUID;
     v_subject_math_id UUID;
     v_subject_physics_id UUID;
+    v_subject_english_id UUID;
     v_grade_10_id UUID;
     v_grade_11_id UUID;
     v_section_a_id UUID;
     v_section_b_id UUID;
+    v_section_nosection_id UUID;
 BEGIN
-    -- Obtener ID del profesor
+    -- Obtener ID del profesor con entidad
     SELECT id INTO v_teacher_id FROM users WHERE email = 'profesor@asisVox.com';
+    
+    -- Obtener IDs de profesores independientes
+    SELECT id INTO v_teacher_juan_id FROM users WHERE email = 'juan.independiente@mail.com';
+    SELECT id INTO v_teacher_ana_id FROM users WHERE email = 'ana.independiente@mail.com';
     
     -- Obtener ID del año académico actual
     SELECT id INTO v_academic_year_id FROM academic_years WHERE is_current = true LIMIT 1;
@@ -67,7 +119,7 @@ BEGIN
         RETURNING id INTO v_academic_year_id;
     END IF;
 
-    -- Insertar materias (Matemáticas, Física)
+    -- Insertar materias (Matemáticas, Física, Inglés)
     INSERT INTO subjects (name, code, color, is_active) 
     SELECT 'Matemáticas', 'MATH', '#4CAF50', true
     WHERE NOT EXISTS (SELECT 1 FROM subjects WHERE code = 'MATH');
@@ -75,9 +127,14 @@ BEGIN
     INSERT INTO subjects (name, code, color, is_active) 
     SELECT 'Física', 'PHYS', '#2196F3', true
     WHERE NOT EXISTS (SELECT 1 FROM subjects WHERE code = 'PHYS');
+
+    INSERT INTO subjects (name, code, color, is_active) 
+    SELECT 'Inglés', 'ENGLISH', '#FF9800', true
+    WHERE NOT EXISTS (SELECT 1 FROM subjects WHERE code = 'ENGLISH');
     
     SELECT id INTO v_subject_math_id FROM subjects WHERE code = 'MATH';
     SELECT id INTO v_subject_physics_id FROM subjects WHERE code = 'PHYS';
+    SELECT id INTO v_subject_english_id FROM subjects WHERE code = 'ENGLISH';
 
     -- Insertar grados (10°, 11°)
     INSERT INTO grades (name, level, is_active) 
@@ -91,49 +148,102 @@ BEGIN
     SELECT id INTO v_grade_10_id FROM grades WHERE level = 10;
     SELECT id INTO v_grade_11_id FROM grades WHERE level = 11;
 
-    -- Insertar secciones para 10° (A, B)
-    INSERT INTO sections (grade_id, name, academic_year_id, max_students, is_active) 
-    SELECT v_grade_10_id, 'A', v_academic_year_id, 30, true
-    WHERE NOT EXISTS (
-        SELECT 1 FROM sections 
-        WHERE grade_id = v_grade_10_id AND name = 'A' AND academic_year_id = v_academic_year_id
-    );
-    
-    INSERT INTO sections (grade_id, name, academic_year_id, max_students, is_active) 
-    SELECT v_grade_10_id, 'B', v_academic_year_id, 30, true
-    WHERE NOT EXISTS (
-        SELECT 1 FROM sections 
-        WHERE grade_id = v_grade_10_id AND name = 'B' AND academic_year_id = v_academic_year_id
-    );
-    
-    SELECT id INTO v_section_a_id FROM sections 
-    WHERE grade_id = v_grade_10_id AND name = 'A' AND academic_year_id = v_academic_year_id;
-    
-    SELECT id INTO v_section_b_id FROM sections 
-    WHERE grade_id = v_grade_10_id AND name = 'B' AND academic_year_id = v_academic_year_id;
+    -- Obtener la entidad de prueba
+    DECLARE
+        v_entity_test_id UUID;
+    BEGIN
+        SELECT id INTO v_entity_test_id FROM entities WHERE code = 'INS_TEST' LIMIT 1;
 
-    -- Insertar clases
-    -- Clase 1: Matemáticas 10°A
-    INSERT INTO classes (section_id, subject_id, teacher_id, academic_year_id, classroom, is_active) 
-    SELECT v_section_a_id, v_subject_math_id, v_teacher_id, v_academic_year_id, 'Aula 101', true
-    WHERE NOT EXISTS (
-        SELECT 1 FROM classes 
-        WHERE section_id = v_section_a_id AND subject_id = v_subject_math_id AND academic_year_id = v_academic_year_id
-    );
+        -- Insertar secciones para 10° (A, B, Sin Sección)
+        INSERT INTO sections (grade_id, name, academic_year_id, max_students, is_active) 
+        SELECT v_grade_10_id, 'A', v_academic_year_id, 30, true
+        WHERE NOT EXISTS (
+            SELECT 1 FROM sections 
+            WHERE grade_id = v_grade_10_id AND name = 'A' AND academic_year_id = v_academic_year_id
+        );
+        
+        INSERT INTO sections (grade_id, name, academic_year_id, max_students, is_active) 
+        SELECT v_grade_10_id, 'B', v_academic_year_id, 30, true
+        WHERE NOT EXISTS (
+            SELECT 1 FROM sections 
+            WHERE grade_id = v_grade_10_id AND name = 'B' AND academic_year_id = v_academic_year_id
+        );
 
-    -- Clase 2: Matemáticas 10°B
-    INSERT INTO classes (section_id, subject_id, teacher_id, academic_year_id, classroom, is_active) 
-    SELECT v_section_b_id, v_subject_math_id, v_teacher_id, v_academic_year_id, 'Aula 102', true
-    WHERE NOT EXISTS (
-        SELECT 1 FROM classes 
-        WHERE section_id = v_section_b_id AND subject_id = v_subject_math_id AND academic_year_id = v_academic_year_id
-    );
+        INSERT INTO sections (grade_id, name, academic_year_id, max_students, is_active) 
+        SELECT v_grade_10_id, 'Sin Sección', v_academic_year_id, 999, true
+        WHERE NOT EXISTS (
+            SELECT 1 FROM sections 
+            WHERE grade_id = v_grade_10_id AND name = 'Sin Sección' AND academic_year_id = v_academic_year_id
+        );
+        
+        SELECT id INTO v_section_a_id FROM sections 
+        WHERE grade_id = v_grade_10_id AND name = 'A' AND academic_year_id = v_academic_year_id;
+        
+        SELECT id INTO v_section_b_id FROM sections 
+        WHERE grade_id = v_grade_10_id AND name = 'B' AND academic_year_id = v_academic_year_id;
 
-    RAISE NOTICE 'Datos de prueba insertados exitosamente';
+        SELECT id INTO v_section_nosection_id FROM sections 
+        WHERE grade_id = v_grade_10_id AND name = 'Sin Sección' AND academic_year_id = v_academic_year_id;
+
+        -- ============================================
+        -- CLASES PARA PROFESOR CON ENTIDAD
+        -- ============================================
+        
+        -- Clase 1: Matemáticas 10°A (Profesor María González)
+        INSERT INTO classes (entity_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active) 
+        SELECT v_entity_test_id, v_section_a_id, v_subject_math_id, v_teacher_id, v_academic_year_id, 'Aula 101', 52, true
+        WHERE NOT EXISTS (
+            SELECT 1 FROM classes 
+            WHERE section_id = v_section_a_id AND subject_id = v_subject_math_id AND teacher_id = v_teacher_id AND academic_year_id = v_academic_year_id
+        );
+
+        -- Clase 2: Física 10°B (Profesor María González)
+        INSERT INTO classes (entity_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active) 
+        SELECT v_entity_test_id, v_section_b_id, v_subject_physics_id, v_teacher_id, v_academic_year_id, 'Aula 102', 52, true
+        WHERE NOT EXISTS (
+            SELECT 1 FROM classes 
+            WHERE section_id = v_section_b_id AND subject_id = v_subject_physics_id AND teacher_id = v_teacher_id AND academic_year_id = v_academic_year_id
+        );
+
+        -- ============================================
+        -- CLASES PARA PROFESORES INDEPENDIENTES
+        -- ============================================
+        
+        DECLARE
+            v_entity_juan_id UUID;
+            v_entity_ana_id UUID;
+        BEGIN
+            -- Obtener entidades de profesores independientes
+            SELECT id INTO v_entity_juan_id FROM entities WHERE code = 'PROF_JUAN_IND' LIMIT 1;
+            SELECT id INTO v_entity_ana_id FROM entities WHERE code = 'PROF_ANA_IND' LIMIT 1;
+
+            -- Clase 3: Inglés 10°A (Prof. Juan Independiente)
+            IF v_teacher_juan_id IS NOT NULL AND v_entity_juan_id IS NOT NULL THEN
+                INSERT INTO classes (entity_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active) 
+                SELECT v_entity_juan_id, v_section_a_id, v_subject_english_id, v_teacher_juan_id, v_academic_year_id, 'Aula 201', 52, true
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM classes 
+                    WHERE section_id = v_section_a_id AND subject_id = v_subject_english_id AND teacher_id = v_teacher_juan_id AND academic_year_id = v_academic_year_id
+                );
+            END IF;
+
+            -- Clase 4: Matemáticas Sin Sección (Prof. Ana Independiente - Tutoría)
+            IF v_teacher_ana_id IS NOT NULL AND v_entity_ana_id IS NOT NULL THEN
+                INSERT INTO classes (entity_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active) 
+                SELECT v_entity_ana_id, v_section_nosection_id, v_subject_math_id, v_teacher_ana_id, v_academic_year_id, 'Sala de Tutoría', 36, true
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM classes 
+                    WHERE section_id = v_section_nosection_id AND subject_id = v_subject_math_id AND teacher_id = v_teacher_ana_id AND academic_year_id = v_academic_year_id
+                );
+            END IF;
+        END;
+
+        RAISE NOTICE 'Datos de prueba insertados exitosamente';
+    END;
 END $$;
 
 -- ============================================
--- 3. INSERTAR ESTUDIANTES DE PRUEBA (Opcional)
+-- 4. INSERTAR ESTUDIANTES DE PRUEBA (Opcional)
 -- ============================================
 
 -- Insertar algunos estudiantes de prueba
@@ -145,7 +255,10 @@ INSERT INTO students (first_name, last_name, identification_number, date_of_birt
     ('Luis', 'Rodríguez', '12345682', '2009-02-28', 'male', true)
 ON CONFLICT (identification_number) DO NOTHING;
 
--- Inscribir estudiantes en las secciones
+-- Inscribir estudiantes en las secciones (COMENTADO)
+-- Los enrollments deben ser creados por el admin a través de la interfaz,
+-- no automáticamente en el seed. Descomentar solo si se necesita para testing.
+/*
 DO $$
 DECLARE
     v_section_a_id UUID;
@@ -179,6 +292,7 @@ BEGIN
     
     RAISE NOTICE 'Estudiantes inscritos exitosamente';
 END $$;
+*/
 
 -- ============================================
 -- 4. VERIFICACIÓN FINAL

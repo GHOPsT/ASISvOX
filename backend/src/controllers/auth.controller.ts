@@ -179,8 +179,28 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
       }
       finalEntityId = entityId;
     } else {
-      // Teacher que se registra solo: usar NULL temporalmente, se genera después
-      finalEntityId = null;
+      // Teacher que se registra solo: CREAR AUTOMÁTICAMENTE su entidad independiente
+      // Generar código de entidad único basado en email
+      const entityCode = `PROF_${email.split('@')[0].toUpperCase()}_${Date.now()}`;
+      
+      // Crear entidad para profesor independiente
+      const entityResult = await query(
+        `INSERT INTO entities (name, code, address, representative_email, is_active)
+         VALUES ($1, $2, $3, $4, true)
+         RETURNING id`,
+        [
+          `${name} - Independiente`,
+          entityCode,
+          'Dirección Personal',
+          email
+        ]
+      );
+      
+      if (entityResult.rows.length === 0) {
+        throw createError('Error al crear entidad para profesor independiente', 500);
+      }
+      
+      finalEntityId = entityResult.rows[0].id;
     }
   } else if (role === 'admin_entity') {
     // admin_entity DEBE tener entityId
@@ -204,13 +224,8 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     entityId: finalEntityId 
   });
 
-  // Si es un teacher independiente, dejar entity_id como NULL (se puede crear una entidad después)
-  // No asignamos entity_id aquí porque no existe una entidad correspondiente
-  // Los teachers independientes pueden operar sin entidad asignada
-  if (role === 'teacher' && !entityId) {
-    // entity_id permanece NULL - esto es válido en el schema
-    dbUser.entity_id = null;
-  }
+  // El usuario profesor ahora siempre tiene entity_id asignado
+  // (ya sea de su entidad institucional o su propia entidad independiente)
 
   // Convertir formato de BD a formato de respuesta
   const newUser: User = {

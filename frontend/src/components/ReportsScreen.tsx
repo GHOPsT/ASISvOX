@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, Download, FileText, FileSpreadsheet, Filter, Calendar } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { useAuth } from "../contexts/AuthContext";
+import { apiClient } from "../services/api";
+import { tokenService } from "../services/tokenService";
 import { toast } from "sonner";
 
 interface ReportsScreenProps {
@@ -42,14 +44,58 @@ export function ReportsScreen({ onBack }: ReportsScreenProps) {
   const [selectedClass, setSelectedClass] = useState<string>("all");
   const [selectedPeriod, setSelectedPeriod] = useState<string>("current");
   const [selectedFormat, setSelectedFormat] = useState<string>("pdf");
+  const [reportData, setReportData] = useState<ClassReport[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Datos mock para los reportes
-  const classes = [
-    { id: "1", name: "Matemáticas 10°A", subject: "Matemáticas" },
-    { id: "2", name: "Álgebra 11°B", subject: "Matemáticas" },
-    { id: "3", name: "Geometría 9°C", subject: "Matemáticas" },
-    { id: "4", name: "Cálculo 12°A", subject: "Matemáticas Avanzadas" }
-  ];
+  // Cargar reportes y clases al montar el componente
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const token = tokenService.getToken();
+        if (token) {
+          apiClient.setToken(token);
+        }
+
+        // Cargar clases
+        const classesResponse = await apiClient.classes.getClasses();
+        if (classesResponse.success && classesResponse.data) {
+          const formattedClasses = classesResponse.data.map((cls: any) => ({
+            id: cls.id,
+            name: cls.name,
+            subject: cls.subject
+          }));
+          setClasses(formattedClasses);
+        }
+
+        // Cargar reportes
+        const reportsResponse = await apiClient.reports.getReports();
+        if (reportsResponse.success && reportsResponse.data) {
+          const formattedReports = reportsResponse.data.map((report: any) => ({
+            classId: report.class_id,
+            className: report.class_name || report.className,
+            subject: report.subject,
+            studentCount: report.student_count || report.studentCount || 0,
+            grades: report.grades || [],
+            evaluationTypes: report.evaluation_types || report.evaluationTypes || [],
+            averageByType: report.average_by_type || report.averageByType || {},
+            classAverage: report.class_average || report.classAverage || 0
+          }));
+          setReportData(formattedReports);
+        }
+      } catch (error) {
+        console.error('Error loading reports:', error);
+        toast.error('No se pudieron cargar los reportes');
+        setReportData([]);
+        setClasses([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
 
   const evaluationTypes = [
     "Práctica Calificada",
@@ -57,59 +103,6 @@ export function ReportsScreen({ onBack }: ReportsScreenProps) {
     "Test de Entrada",
     "Proyecto",
     "Participación"
-  ];
-
-  // Mock data para el reporte
-  const mockReportData: ClassReport[] = [
-    {
-      classId: "1",
-      className: "Matemáticas 10°A",
-      subject: "Matemáticas",
-      studentCount: 32,
-      grades: [
-        {
-          studentId: "1",
-          studentName: "Ana García",
-          grades: {
-            "Práctica Calificada": [{ score: 18, weight: 30, date: "2024-01-15" }, { score: 16, weight: 30, date: "2024-02-01" }],
-            "Examen Parcial": [{ score: 17, weight: 40, date: "2024-01-30" }],
-            "Test de Entrada": [{ score: 15, weight: 15, date: "2024-01-08" }],
-            "Participación": [{ score: 19, weight: 15, date: "2024-02-05" }]
-          },
-          finalGrade: 17.2
-        },
-        {
-          studentId: "2",
-          studentName: "Carlos López",
-          grades: {
-            "Práctica Calificada": [{ score: 14, weight: 30, date: "2024-01-15" }, { score: 15, weight: 30, date: "2024-02-01" }],
-            "Examen Parcial": [{ score: 13, weight: 40, date: "2024-01-30" }],
-            "Test de Entrada": [{ score: 12, weight: 15, date: "2024-01-08" }],
-            "Participación": [{ score: 16, weight: 15, date: "2024-02-05" }]
-          },
-          finalGrade: 14.1
-        },
-        {
-          studentId: "3",
-          studentName: "María Rodriguez",
-          grades: {
-            "Práctica Calificada": [{ score: 20, weight: 30, date: "2024-01-15" }, { score: 19, weight: 30, date: "2024-02-01" }],
-            "Examen Parcial": [{ score: 18, weight: 40, date: "2024-01-30" }],
-            "Test de Entrada": [{ score: 17, weight: 15, date: "2024-01-08" }],
-            "Participación": [{ score: 20, weight: 15, date: "2024-02-05" }]
-          },
-          finalGrade: 18.8
-        }
-      ],
-      evaluationTypes: ["Práctica Calificada", "Examen Parcial", "Test de Entrada", "Participación"],
-      averageByType: {
-        "Práctica Calificada": 16.8,
-        "Examen Parcial": 16.0,
-        "Test de Entrada": 14.7,
-        "Participación": 18.3
-      },
-      classAverage: 16.7
-    }
   ];
 
   const exportToPDF = async (classReport: ClassReport) => {
@@ -275,8 +268,8 @@ export function ReportsScreen({ onBack }: ReportsScreenProps) {
   };
 
   const selectedClassData = selectedClass === "all" ? 
-    mockReportData : 
-    mockReportData.filter(c => c.classId === selectedClass);
+    reportData : 
+    reportData.filter(c => c.classId === selectedClass);
 
   return (
     <div className="h-screen bg-background flex flex-col">

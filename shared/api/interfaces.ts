@@ -171,6 +171,9 @@ export interface StudentAPI {
   // POST /api/students
   createStudent(data: CreateStudentData): Promise<ApiResponse<Student>>;
   
+  // POST /api/students (bulk)
+  createStudents(students: any[]): Promise<ApiResponse<any>>;
+  
   // PUT /api/students/:id
   updateStudent(id: string, data: Partial<Student>): Promise<ApiResponse<Student>>;
   
@@ -222,11 +225,23 @@ export interface ClassAPI {
   // GET /api/classes/:id/students
   getClassStudents(id: string): Promise<ApiResponse<Student[]>>;
   
-  // POST /api/classes/:id/students
+  // POST /api/classes/:id/students (single)
   addStudentToClass(classId: string, studentId: string): Promise<ApiResponse<void>>;
+  
+  // POST /api/classes/:id/students (bulk)
+  addStudentsToClass(classId: string, studentIds: string[]): Promise<ApiResponse<any>>;
   
   // DELETE /api/classes/:id/students/:studentId
   removeStudentFromClass(classId: string, studentId: string): Promise<ApiResponse<void>>;
+  
+  // POST /api/classes/:id/schedules
+  createSchedules(classId: string, schedules: CreateScheduleData[]): Promise<ApiResponse<void>>;
+  
+  // GET /api/classes/:id/schedules
+  getSchedules(classId: string): Promise<ApiResponse<any[]>>;
+  
+  // DELETE /api/classes/:id/schedules/:dayOfWeek
+  deleteSchedule(classId: string, dayOfWeek: number): Promise<ApiResponse<void>>;
 }
 
 export interface ClassFilters {
@@ -240,12 +255,13 @@ export interface ClassFilters {
 }
 
 export interface CreateClassData {
-  entityId: string;
+  entityId?: string; // Opcional - si no se proporciona, se asigna automáticamente
   subjectId: string;
   sectionId: string;
   teacherId?: string; // Opcional - si no se proporciona, se asigna al usuario actual (teacher)
   academicYearId: string;
   classroom?: string;
+  weeksDuration?: number; // Duración en semanas (1-52)
 }
 
 // ===============================
@@ -475,4 +491,14 @@ export interface VoiceGradingData {
   assessmentId: string;
   audioData: string; // Base64 encoded audio
   studentNames: string[];
+}
+
+// ===============================
+// SCHEDULE MANAGEMENT
+// ===============================
+
+export interface CreateScheduleData {
+  dayOfWeek: number; // 0-6 (0 = Sunday)
+  startTime: string; // HH:MM format
+  endTime: string; // HH:MM format
 }

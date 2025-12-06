@@ -1,0 +1,114 @@
+
+════════════════════════════════════════════════════════════════════════════════
+
+    📋 COORDINACIÓN COMPLETADA - AddClassModal
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+DOCUMENTOS CREADOS
+════════════════════════════════════════════════════════════════════════════════
+
+1. ADDCLASSMODAL_BUSINESS_RULES.txt
+   └─ Análisis inicial de problemas y reglas propuestas
+
+2. API_CALLS_ANALYSIS.txt
+   └─ Hallazgo crítico: Los horarios se pierden en el guardado actual
+   └─ Solución: Opción B (AddClassModal hace ambas API calls)
+
+3. ADDCLASSMODAL_ACUERDOS_FINALES.txt
+   └─ Resumen de todas las decisiones acordadas
+   └─ Implementación detallada de Opción B
+   └─ Pseudocódigo completo para handleSubmit()
+
+4. PREGUNTAS_FINALES_IMPLEMENTACION.txt
+   └─ 4 preguntas clave para detalles finales
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+ACUERDOS FINALES RESUMIDOS
+════════════════════════════════════════════════════════════════════════════════
+
+MATERIAS (SUBJECTS):
+  ✅ Mostrar todas, activas, ordenadas alfabéticamente
+
+SECCIÓN (SECTIONS):
+  ✅ Mostrar todas, alfabéticamente, obligatorio
+  ❓ PREGUNTA: ¿"Sin Sección" opción A/B/C?
+
+AÑO ACADÉMICO (ACADEMIC YEAR):
+  ✅ Mostrar todos (filtrar solo futuros/actuales)
+  ✅ Pre-seleccionar el actual
+  ✅ Mostrar badges "Actual" / "Próximo"
+  ❓ PREGUNTAS: Cómo determinar actual/pasado, estructura del API
+
+AULA/SALÓN (CLASSROOM):
+  ✅ Sin cambios (bien actual)
+
+DURACIÓN SEMANAS (WEEKS_DURATION):
+  ✅ Iniciar VACÍO (no 52)
+  ✅ Permitir borrado completo
+  ✅ Validación: 1-52, obligatorio
+  ✅ Mostrar ayuda visual
+
+HORARIOS (SCHEDULES):
+  ✅✅ OPCIÓN B FINAL:
+     └─ AddClassModal hace AMBAS API calls
+     └─ 1. POST /api/classes
+     └─ 2. POST /api/classes/{id}/schedules
+     └─ Garantiza: transacción todo o nada
+     └─ Si falla → modal NO cierra, usuario corrige
+     └─ Si OK → notifica padre vía onSave(newClass)
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA IDENTIFICADO Y SOLUCIONADO
+════════════════════════════════════════════════════════════════════════════════
+
+❌ PROBLEMA ORIGINAL:
+
+Los horarios se pierden en el guardado actual:
+├─ AddClassModal recolecta schedules
+├─ TeacherDashboard.handleAddClass() LOS IGNORA
+└─ Solo se guarda la clase, nunca los horarios
+
+✅ SOLUCIÓN (Opción B):
+
+AddClassModal maneja AMBAS llamadas:
+├─ Crea clase (POST /api/classes)
+├─ Crea horarios (POST /api/classes/{id}/schedules)
+├─ Si TODO OK → notifica padre
+├─ Si FALLA cualquiera → muestra error, modal NO cierra
+└─ GARANTÍA: "No debe dejar crear clase sin horarios"
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+PRÓXIMOS PASOS
+════════════════════════════════════════════════════════════════════════════════
+
+1. RESPONDER 4 PREGUNTAS FINALES:
+   [ ] ¿"Sin Sección" - opción A/B/C?
+   [ ] ¿Cómo determinar año actual?
+   [ ] ¿Cómo filtrar años pasados?
+   [ ] ¿Estructura del API academic-years?
+
+2. DESPUÉS DE RESPUESTAS → IMPLEMENTAR:
+   └─ Modificar AddClassModal.tsx
+   └─ Modificar TeacherDashboard.tsx (handleAddClass)
+   └─ Testear flujo completo
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+NO SE HA CREADO CÓDIGO AÚN
+════════════════════════════════════════════════════════════════════════════════
+
+Como solicitaste: "NO crees código hasta que hayamos decidido y esté conforme"
+
+✅ COORDINACIÓN COMPLETADA
+❌ CÓDIGO APTO (esperando 4 respuestas finales)
+
+════════════════════════════════════════════════════════════════════════════════

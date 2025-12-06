@@ -111,6 +111,7 @@ export interface Class {
   teacher?: Teacher;
   students: string[];
   schedule?: string;
+  schedules?: Schedule[];
   period?: string;
   academicYear?: string;
   classroom?: string;

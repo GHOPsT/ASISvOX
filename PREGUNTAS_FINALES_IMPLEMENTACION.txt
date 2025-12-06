@@ -1,0 +1,144 @@
+
+════════════════════════════════════════════════════════════════════════════════
+
+    ❓ PREGUNTAS FINALES ANTES DE IMPLEMENTACIÓN
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+PREGUNTA 1: "Sin Sección" ✅ VERIFICADO
+════════════════════════════════════════════════════════════════════════════════
+
+Busqué en:
+├─ backend/seed.sql → NO existe "Sin Sección"
+├─ backend/schema.sql → NO existe registro especial
+└─ Conclusión: "Sin Sección" NO está en la BD
+
+DECISIÓN NECESARIA:
+┌─────────────────────────────────────────────────────────────────────────────
+│ ¿Qué hacer con "Sin Sección"?
+│ 
+│ Opción A: NO mostrar
+│ └─ El Select muestra solo: A, B, C (lo que exista en la BD)
+│ └─ Todas las clases DEBEN tener una sección
+│ 
+│ Opción B: Crear "Sin Sección" como entrada especial en la BD
+│ └─ Agregar a seed.sql una sección llamada "Sin Sección"
+│ └─ Luego mostrar en el Select
+│ 
+│ Opción C: Crear "Sin Sección" como opción virtual en frontend
+│ └─ El Select muestra: A, B, C, Sin Sección (virtual)
+│ └─ Si usuario elige "Sin Sección", enviar sectionId = null
+│ └─ PROBLEMA: La BD requiere sectionId (NOT NULL en schema)
+└─────────────────────────────────────────────────────────────────────────────
+
+❓ PREGUNTA: ¿Qué opción prefieres?
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+PREGUNTA 2: Año Académico ACTUAL
+════════════════════════════════════════════════════════════════════════════════
+
+Para PRE-SELECCIONAR el año actual, necesito saber:
+
+┌─────────────────────────────────────────────────────────────────────────────
+│ ¿Cómo se define el "año actual" en tu sistema?
+│ 
+│ Opción A: Por fecha actual
+│ └─ Año actual = el que contiene la fecha de hoy
+│ └─ Ejemplo: Hoy es 2024-12-06, año es "2024-2025"
+│ └─ Cálculo: if (today >= yearStartDate && today <= yearEndDate)
+│ 
+│ Opción B: Por status en BD
+│ └─ Academic Years table tiene campo "status" (active, closed, etc.)
+│ └─ Año actual = el que tiene status = "active"
+│ 
+│ Opción C: El primero en la lista (por defecto)
+│ └─ No hay lógica especial, solo mostrar el primero
+│ 
+│ Pregunta secundaria: ¿El API retorna:
+│ └─ start_date y end_date?
+│ └─ status?
+│ └─ is_current flag?
+└─────────────────────────────────────────────────────────────────────────────
+
+❓ PREGUNTA: ¿Cómo se determina el "año actual"?
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+PREGUNTA 3: Filtrar años PASADOS
+════════════════════════════════════════════════════════════════════════════════
+
+Según acuerdo: "Solo mostrar años actuales/futuros (no pasados)"
+
+┌─────────────────────────────────────────────────────────────────────────────
+│ ¿Cómo determinar si un año es "pasado"?
+│ 
+│ Opción A: Por fecha de fin
+│ └─ if (yearEndDate < today) → es pasado
+│ └─ Filtrar: academicYears.filter(y => new Date(y.end_date) >= today)
+│ 
+│ Opción B: Por status
+│ └─ if (status === "closed") → es pasado
+│ └─ Filtrar: academicYears.filter(y => y.status !== "closed")
+│ 
+│ Opción C: Mostrar todos (ignorar esta regla)
+│ └─ No filtrar, mostrar todos los años
+│ 
+│ NOTA: Esto depende de la respuesta a PREGUNTA 2
+└─────────────────────────────────────────────────────────────────────────────
+
+❓ PREGUNTA: ¿Cómo se identifica un año "pasado"?
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+PREGUNTA 4: Estructura del API de Academic Years
+════════════════════════════════════════════════════════════════════════════════
+
+Para implementar correctamente, necesito entender:
+
+┌─────────────────────────────────────────────────────────────────────────────
+│ GET /api/master/academic-years retorna:
+│ 
+│ {
+│   "success": true,
+│   "data": [
+│     {
+│       "id": "uuid",
+│       "name": "2024-2025",
+│       "start_date": "2024-09-01",      ← ¿Existe?
+│       "end_date": "2025-06-30",        ← ¿Existe?
+│       "status": "active",              ← ¿Existe?
+│       "is_current": true,              ← ¿Existe?
+│       "created_at": "...",
+│       "updated_at": "..."
+│     }
+│   ]
+│ }
+│ 
+│ ¿Cuáles campos retorna realmente?
+└─────────────────────────────────────────────────────────────────────────────
+
+❓ PREGUNTA: ¿Qué estructura tiene la respuesta de academic-years?
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+RESUMEN DE PREGUNTAS
+════════════════════════════════════════════════════════════════════════════════
+
+1. ¿"Sin Sección" qué opción? (A, B, C)
+
+2. ¿Cómo determinar año "actual"? (fecha, status, is_current)
+
+3. ¿Cómo identificar año "pasado" para filtrar? (end_date < today, status=closed)
+
+4. ¿Qué campos retorna GET /api/master/academic-years?
+
+
+CUANDO RESPONDERE ESTAS PREGUNTAS → Procederé con la implementación exacta
+
+════════════════════════════════════════════════════════════════════════════════

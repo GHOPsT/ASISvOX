@@ -5,6 +5,8 @@ import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Bell, X, Check, Calendar, BookOpen } from "lucide-react";
 import { toast } from "sonner";
+import { apiClient } from "../services/api";
+import { tokenService } from "../services/tokenService";
 
 interface Notification {
   id: string;
@@ -28,16 +30,37 @@ export function NotificationsPanel({ userId }: NotificationsPanelProps) {
     loadNotifications();
   }, [userId]);
 
-  const loadNotifications = () => {
-    const allNotifications = JSON.parse(localStorage.getItem('asisVox_notifications') || '[]');
-    const userNotifications = allNotifications
-      .filter((n: Notification) => n.userId === userId)
-      .sort((a: Notification, b: Notification) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-    
-    setNotifications(userNotifications);
-    setUnreadCount(userNotifications.filter((n: Notification) => !n.read).length);
+  const loadNotifications = async () => {
+    try {
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
+
+      // Load from localStorage for now (notifications endpoint not yet implemented in backend)
+      // TODO: Replace with API call when GET /notifications endpoint is available
+      const allNotifications = JSON.parse(localStorage.getItem('asisVox_notifications') || '[]');
+      const userNotifications = allNotifications
+        .filter((n: Notification) => n.userId === userId)
+        .sort((a: Notification, b: Notification) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      
+      setNotifications(userNotifications);
+      setUnreadCount(userNotifications.filter((n: Notification) => !n.read).length);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      // Fallback to localStorage
+      const allNotifications = JSON.parse(localStorage.getItem('asisVox_notifications') || '[]');
+      const userNotifications = allNotifications
+        .filter((n: Notification) => n.userId === userId)
+        .sort((a: Notification, b: Notification) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      
+      setNotifications(userNotifications);
+      setUnreadCount(userNotifications.filter((n: Notification) => !n.read).length);
+    }
   };
 
   const markAsRead = (notificationId: string) => {

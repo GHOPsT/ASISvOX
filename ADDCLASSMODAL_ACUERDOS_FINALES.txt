@@ -1,0 +1,318 @@
+
+════════════════════════════════════════════════════════════════════════════════
+
+    ✅ ACUERDOS FINALES - AddClassModal (ANTES DE IMPLEMENTACIÓN)
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+SECCIÓN 1: MATERIAS (SUBJECTS) ✅
+════════════════════════════════════════════════════════════════════════════════
+
+ACUERDO FINAL:
+
+✅ REGLA 1.1: Mostrar TODAS las materias (con scroll si hay muchas)
+   └─ SelectContent debe permitir scroll
+
+✅ REGLA 1.2: Ordenar ALFABÉTICAMENTE por nombre
+   └─ subjects.sort((a, b) => a.name.localeCompare(b.name))
+
+✅ REGLA 1.3: Solo materias ACTIVAS (is_active = true)
+   └─ Backend ya filtra, pero verificar que el API devuelva solo activas
+
+
+IMPLEMENTACIÓN:
+├─ Cargar subjects del API: GET /api/master/subjects
+├─ Filtrar en frontend: filter(s => s.is_active === true) [por si acaso]
+├─ Ordenar alfabéticamente
+└─ Renderizar sin límite (SelectContent con scroll automático)
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+SECCIÓN 2: SECCIÓN (SECTIONS) ✅
+════════════════════════════════════════════════════════════════════════════════
+
+CLARIFICACIÓN de REGLA 2.4:
+─────────────────────────────
+La pregunta era: "¿Las secciones se filtran por grado de la materia?"
+
+Explicación:
+├─ Materia (Subject) → pertenece a múltiples grados (10°, 11°, etc.)
+├─ Sección (Section) → pertenece a un grado específico (10°A, 10°B)
+├─ Cuando creas una clase → necesitas:
+│  ├─ Materia: Física (cualquier grado)
+│  └─ Sección: 10°A (grado específico)
+├─ Regla: La sección DEBE ser del mismo grado donde enseñas esa materia
+└─ Ejemplo: No puedes crear "Física 11° en sección 10°A"
+
+PERO según tu decisión:
+└─ NO filtrar: Las secciones son fijas A, B, C, Sin Sección
+   (El backend validará que sean compatibles)
+
+
+ACUERDO FINAL:
+
+✅ REGLA 2.1: Mostrar TODAS las secciones
+   └─ API retorna: secciones de ese grado/año académico
+
+✅ REGLA 2.2: "Sin Sección" en BD
+   ├─ Verificar si existe en seed.sql
+   ├─ Si NO existe → NO mostrar como opción
+   ├─ Si existe → mostrar en el Select
+
+✅ REGLA 2.3: Ordenar ALFABÉTICAMENTE (A, B, C, ...)
+
+✅ REGLA 2.4: NO filtrar por grado
+   └─ Mostrar todos (El backend validará)
+
+✅ OBLIGATORIO: Sí, es requerido seleccionar una sección
+
+
+VERIFICACIÓN NECESARIA:
+├─ [ ] ¿Existe "Sin Sección" en seed.sql?
+└─ [ ] ¿Qué secciones existen actualmente?
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+SECCIÓN 3: AÑO ACADÉMICO (ACADEMIC YEAR) ✅
+════════════════════════════════════════════════════════════════════════════════
+
+ACUERDO FINAL:
+
+✅ REGLA 3.1: Mostrar TODOS los años académicos
+
+✅ REGLA 3.2: PRE-SELECCIONAR el año ACTUAL automáticamente
+   └─ En el useEffect de loadFormData(), después de cargar años:
+      setFormData(prev => ({ ...prev, academicYearId: currentYearId }))
+
+✅ REGLA 3.3: OPCIÓN A - Jerarquía de display
+   ├─ Ordenar por año DESC (nuevos primero)
+   ├─ Mostrar badge "Actual" para el año actual
+   ├─ Mostrar badge "Próximo" para el año siguiente
+   └─ Ejemplo en SelectItem:
+      "2024-2025 (Actual)" / "2025-2026 (Próximo)" / "2023-2024"
+
+✅ REGLA 3.4: NO permitir años pasados
+   └─ Filtrar: academicYears.filter(y => y.status !== 'closed' || y.isCurrent)
+   └─ O filtrar por fecha: year >= currentYear
+
+
+IMPLEMENTACIÓN:
+├─ Cargar todos los años del API
+├─ Calcular año actual (comparar con fecha)
+├─ Determinar: actual, próximo, pasados
+├─ Ordenar DESC
+├─ Pre-seleccionar el actual
+├─ Mostrar badges en SelectItem
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+SECCIÓN 4: AULA/SALÓN (CLASSROOM) ✅
+════════════════════════════════════════════════════════════════════════════════
+
+✅ ESTADO: BIEN, NO cambios
+   └─ Campo opcional, sin validación especial
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+SECCIÓN 5: DURACIÓN EN SEMANAS (WEEKS_DURATION) ✅
+════════════════════════════════════════════════════════════════════════════════
+
+ACUERDO FINAL:
+
+✅ REGLA 5.1: Iniciar VACÍO (no con 52)
+   └─ weeksDuration: "" (string vacío, no número)
+
+✅ REGLA 5.2: Permitir borrado COMPLETO
+   └─ User puede dejar campo vacío
+   └─ NO restaurar valor automáticamente
+
+✅ REGLA 5.3: Validación en handleSubmit()
+   ├─ Si vacío → ERROR: "Duración en semanas es requerida"
+   ├─ Si no es número → ERROR: "Debe ser un número"
+   ├─ Si < 1 o > 52 → ERROR: "Debe estar entre 1 y 52 semanas"
+   └─ Si válido → OK
+
+✅ REGLA 5.4: Mostrar ayuda visual
+   └─ Texto debajo: "¿Cuántas semanas durará esta clase? (1-52)"
+
+✅ OBLIGATORIO: Sí, es requerido rellenar antes de crear
+
+
+IMPLEMENTACIÓN:
+├─ State: weeksDuration: "" (vacío inicial)
+├─ Input: type="number" min="1" max="52" value={weeksDuration}
+├─ onChange: setFormData(prev => ({ ...prev, weeksDuration: e.target.value }))
+├─ Validación en handleSubmit:
+│  └─ if (!formData.weeksDuration || parseInt(formData.weeksDuration) < 1)
+├─ Backend: ya lo valida
+└─ Toast: muestra error si falta
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+SECCIÓN 6: HORARIO DE CLASE (SCHEDULES) ✅✅✅
+════════════════════════════════════════════════════════════════════════════════
+
+ACUERDO FINAL - OPCIÓN B (RECOMENDADA):
+
+✅ REGLA 6.1: AddClassModal hace AMBAS llamadas API
+
+FLUJO IMPLEMENTACIÓN:
+
+1. AddClassModal.handleSubmit() ejecuta:
+   
+   a) POST /api/classes (crear clase)
+      └─ Body: { subjectId, sectionId, academicYearId, classroom, weeksDuration }
+      └─ Response: { success, data: { id, ... } }
+   
+   b) POST /api/classes/{classId}/schedules (crear horarios)
+      └─ Body: { schedules: [ { day_of_week, start_time, end_time }, ... ] }
+      └─ Response: { success, data: [...] }
+   
+   c) SI ambos OK → llama onSave(newClass)
+   
+   d) SI cualquiera FALLA → muestra error, NO llama onSave (modal no cierra)
+
+2. TeacherDashboard.handleAddClass():
+   ├─ Recibe newClass (ya guardado en BD)
+   ├─ Actualiza UI: setClasses([...classes, newClass])
+   ├─ Guarda en localStorage
+   └─ Modal cierra
+
+VENTAJAS:
+├─ ✅ AddClassModal responsable de guardar lo que recolecta
+├─ ✅ Transacción lógica: todo o nada
+├─ ✅ "No debe dejar crear clase sin horarios" CUMPLIDO
+├─ ✅ Si falla → error en modal, usuario puede corregir
+├─ ✅ Mejor UX y separación de responsabilidades
+
+VALIDACIONES:
+├─ Mínimo 1 horario requerido (ya existe)
+├─ Cada horario: day_of_week (0-6), start_time, end_time
+├─ No puede haber 2 horarios el mismo día (backend valida)
+├─ end_time > start_time (backend valida)
+
+
+IMPLEMENTACIÓN EN AddClassModal:
+─────────────────────────────────
+
+```typescript
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  // Validaciones...
+  if (!formData.subjectId || !formData.sectionId || !formData.academicYearId) {
+    toast.error("Por favor completa los campos básicos");
+    return;
+  }
+
+  if (formData.schedules.length === 0) {
+    toast.error("Por favor agrega al menos un horario");
+    return;
+  }
+
+  if (!formData.weeksDuration) {
+    toast.error("Duración en semanas es requerida");
+    return;
+  }
+
+  setIsLoading(true);
+  try {
+    // PASO 1: Crear clase
+    const classResponse = await apiClient.classes.createClass({
+      subjectId: formData.subjectId,
+      sectionId: formData.sectionId,
+      academicYearId: formData.academicYearId,
+      classroom: formData.classroom || "",
+      weeksDuration: parseInt(formData.weeksDuration)
+    });
+
+    if (!classResponse.success || !classResponse.data?.id) {
+      throw new Error("Error al crear la clase");
+    }
+
+    // PASO 2: Crear horarios
+    const schedulesResponse = await apiClient.classes.createSchedules(
+      classResponse.data.id,
+      { schedules: formData.schedules }
+    );
+
+    if (!schedulesResponse.success) {
+      // ❌ Clase se creó pero horarios fallaron
+      toast.error("Clase creada pero error al guardar horarios");
+      throw new Error("Error al guardar horarios");
+    }
+
+    // ✅ TODO OK - Notificar al padre
+    onSave(classResponse.data);
+    
+    // Reset formulario
+    setFormData({
+      subjectId: "",
+      sectionId: "",
+      academicYearId: "",
+      classroom: "",
+      weeksDuration: "",
+      schedules: []
+    });
+    
+    toast.success("Clase y horarios creados exitosamente");
+    onClose();
+
+  } catch (error) {
+    console.error("Error creando clase:", error);
+    toast.error(`Error: ${error instanceof Error ? error.message : "Desconocido"}`);
+    // Modal NO cierra, usuario puede corregir
+  } finally {
+    setIsLoading(false);
+  }
+};
+```
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+RESUMEN DECISIONES FINALES
+════════════════════════════════════════════════════════════════════════════════
+
+✅ MATERIAS:
+   └─ Mostrar todas, activas, ordenadas alfabéticamente
+
+✅ SECCIÓN:
+   └─ Mostrar todas, ordenadas alfabéticamente, obligatorio
+   └─ VERIFICAR: ¿"Sin Sección" existe en BD?
+
+✅ AÑO ACADÉMICO:
+   └─ Mostrar todos, pre-seleccionar actual, solo actuales/futuros, con badges
+
+✅ AULA:
+   └─ Sin cambios
+
+✅ DURACIÓN SEMANAS:
+   └─ Iniciar vacío, obligatorio, validación 1-52, mostrar ayuda
+
+✅ HORARIOS:
+   └─ Opción B: AddClassModal hace ambas llamadas (clase + schedules)
+   └─ Garantiza: transacción todo o nada
+   └─ Error si falla cualquiera: modal no cierra, usuario corrige
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+VERIFICACIONES PENDIENTES
+════════════════════════════════════════════════════════════════════════════════
+
+ANTES DE IMPLEMENTAR:
+
+[ ] ¿Existe "Sin Sección" en la BD (seed.sql)?
+[ ] ¿Cómo detectar el año académico "actual"? (por fecha, por status, etc.)
+[ ] ¿API de master/academic-years retorna status/año de inicio?
+
+ESTAS RESPUESTAS ayudarán a ajustar la implementación exacta.
+
+════════════════════════════════════════════════════════════════════════════════

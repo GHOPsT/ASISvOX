@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Badge } from "../ui/badge";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import { toast } from "sonner";
+import { apiClient } from "../../services/api";
+import { tokenService } from "../../services/tokenService";
 import { 
   ArrowLeft, 
   Plus, 
@@ -93,13 +95,35 @@ export function TeacherAssignmentManager({ onBack }: TeacherAssignmentManagerPro
     loadAssignments();
   }, []);
 
-  const loadTeachers = () => {
-    const storedUsers = JSON.parse(localStorage.getItem('asisVox_users') || '[]');
-    const teacherUsers = storedUsers.filter((user: any) => user.role === 'teacher');
-    setTeachers(teacherUsers);
+  const loadTeachers = async () => {
+    try {
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
+
+      // Load teachers from API
+      const response = await apiClient.teachers.getTeachers();
+      if (response.success && response.data) {
+        const formattedTeachers = response.data.map((teacher: any) => ({
+          id: teacher.id,
+          name: teacher.name,
+          email: teacher.email,
+          role: 'teacher'
+        }));
+        setTeachers(formattedTeachers);
+      }
+    } catch (error) {
+      console.error('Error loading teachers:', error);
+      toast.error('Error al cargar docentes');
+      // Fallback to empty array
+      setTeachers([]);
+    }
   };
 
   const loadAssignments = () => {
+    // For now, using localStorage as fallback while backend endpoint is developed
+    // TODO: Replace with API call when GET /teacher-assignments endpoint is available
     const storedAssignments = JSON.parse(localStorage.getItem('asisVox_teacher_assignments') || '[]');
     setAssignments(storedAssignments);
   };

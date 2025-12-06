@@ -16,6 +16,8 @@ router.put('/:id', auth_1.requireTeacherOrAdmin, class_controller_1.updateClass)
 router.delete('/:id', auth_1.requireTeacherOrAdmin, class_controller_1.deleteClass);
 // Obtener estudiantes de una clase
 router.get('/:id/students', auth_1.requireTeacherOrAdmin, class_controller_1.getClassStudents);
+// Agregar estudiantes a una clase
+router.post('/:classId/students', auth_1.requireTeacherOrAdmin, class_controller_1.addStudentsToClass);
 // Obtener clases de un docente específico (el teacher puede ver sus propias clases)
 router.get('/teacher/:teacherId', auth_1.requireTeacherOrAdmin, class_controller_1.getTeacherClasses);
 // ===============================

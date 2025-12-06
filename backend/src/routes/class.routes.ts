@@ -11,7 +11,8 @@ import {
   createSchedules,
   getSchedules,
   updateSchedule,
-  deleteSchedule
+  deleteSchedule,
+  addStudentsToClass
 } from '../controllers/class.controller';
 
 const router = Router();
@@ -33,6 +34,9 @@ router.delete('/:id', requireTeacherOrAdmin, deleteClass);
 
 // Obtener estudiantes de una clase
 router.get('/:id/students', requireTeacherOrAdmin, getClassStudents);
+
+// Agregar estudiantes a una clase
+router.post('/:classId/students', requireTeacherOrAdmin, addStudentsToClass);
 
 // Obtener clases de un docente específico (el teacher puede ver sus propias clases)
 router.get('/teacher/:teacherId', requireTeacherOrAdmin, getTeacherClasses);

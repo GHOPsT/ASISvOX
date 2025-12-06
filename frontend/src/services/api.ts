@@ -254,6 +254,10 @@ class ApiClient {
       return this.post<ApiResponse<Student>>('/students', data);
     },
 
+    createStudents: async (students: any[]): Promise<ApiResponse<any>> => {
+      return this.post<ApiResponse<any>>('/students', { students });
+    },
+
     updateStudent: async (id: string, data: Partial<Student>): Promise<ApiResponse<Student>> => {
       return this.put<ApiResponse<Student>>(`/students/${id}`, data);
     },
@@ -288,7 +292,15 @@ class ApiClient {
     },
 
     createClass: async (data: any): Promise<ApiResponse<Class>> => {
-      return this.post<ApiResponse<Class>>('/classes', data);
+      // Convertir camelCase a snake_case para el backend
+      const backendData = {
+        subject_id: data.subjectId,
+        section_id: data.sectionId,
+        academic_year_id: data.academicYearId,
+        classroom: data.classroom,
+        weeks_duration: data.weeksDuration
+      };
+      return this.post<ApiResponse<Class>>('/classes', backendData);
     },
 
     updateClass: async (id: string, data: Partial<Class>): Promise<ApiResponse<Class>> => {
@@ -307,8 +319,30 @@ class ApiClient {
       return this.post<ApiResponse<void>>(`/classes/${classId}/students`, { studentId });
     },
 
+    addStudentsToClass: async (classId: string, studentIds: string[]): Promise<ApiResponse<any>> => {
+      return this.post<ApiResponse<any>>(`/classes/${classId}/students`, { studentIds });
+    },
+
     removeStudentFromClass: async (classId: string, studentId: string): Promise<ApiResponse<void>> => {
       return this.delete<ApiResponse<void>>(`/classes/${classId}/students/${studentId}`);
+    },
+
+    createSchedules: async (classId: string, schedules: any[]): Promise<ApiResponse<void>> => {
+      // Convertir camelCase a snake_case para el backend
+      const backendSchedules = schedules.map(s => ({
+        day_of_week: s.dayOfWeek,
+        start_time: s.startTime,
+        end_time: s.endTime
+      }));
+      return this.post<ApiResponse<void>>(`/classes/${classId}/schedules`, { schedules: backendSchedules });
+    },
+
+    getSchedules: async (classId: string): Promise<ApiResponse<any[]>> => {
+      return this.get<ApiResponse<any[]>>(`/classes/${classId}/schedules`);
+    },
+
+    deleteSchedule: async (classId: string, dayOfWeek: number): Promise<ApiResponse<void>> => {
+      return this.delete<ApiResponse<void>>(`/classes/${classId}/schedules/${dayOfWeek}`);
     },
   };
 

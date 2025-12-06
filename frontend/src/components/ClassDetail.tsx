@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -8,6 +8,9 @@ import { StudentCard } from "./StudentCard";
 import { VoiceGrading } from "./VoiceGrading";
 import { AssessmentSetup } from "./AssessmentSetup";
 import { GradingInterface } from "./GradingInterface";
+import { AddStudentsModal } from "./AddStudentsModal";
+import { apiClient } from "../services/api";
+import { tokenService } from "../services/tokenService";
 import { 
   ArrowLeft, 
   Users, 
@@ -16,7 +19,8 @@ import {
   Search,
   Filter,
   Save,
-  FileText
+  FileText,
+  UserPlus
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,33 +58,68 @@ export function ClassDetail({ classId, onBack }: ClassDetailProps) {
   const [activeTab, setActiveTab] = useState("students");
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [grades, setGrades] = useState<StudentGrade[]>([]);
-
-  // Datos mock de la clase
-  const classInfo = {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [showAddStudentsModal, setShowAddStudentsModal] = useState(false);
+  const [classInfo, setClassInfo] = useState<any>({
     id: classId,
-    name: "Matemáticas 10°A",
-    subject: "Matemáticas",
-    schedule: "Lun, Mié, Vie - 8:00 AM",
-    period: "2024-1",
-    teacher: "Prof. María González"
-  };
+    name: "",
+    subject: "",
+    schedule: "",
+    period: "",
+    teacher: ""
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [students, setStudents] = useState<Student[]>([
-    { id: "1", name: "Juan Pérez García", code: "2024001", grade: 8.5, attendance: true },
-    { id: "2", name: "María González López", code: "2024002", grade: 9.2, attendance: true },
-    { id: "3", name: "Carlos Rodríguez Martín", code: "2024003", grade: 7.8, attendance: false },
-    { id: "4", name: "Ana Fernández Silva", code: "2024004", grade: 8.9, attendance: true },
-    { id: "5", name: "Luis Hernández Ruiz", code: "2024005", grade: 6.5, attendance: true },
-    { id: "6", name: "Sofia Morales Castro", code: "2024006", grade: 9.5, attendance: true },
-    { id: "7", name: "Diego Vargas Mendoza", code: "2024007", grade: 7.2, attendance: false },
-    { id: "8", name: "Isabella Torres Jiménez", code: "2024008", grade: 8.7, attendance: true },
-    { id: "9", name: "Andrés Ramírez Ortega", code: "2024009", grade: 8.1, attendance: true },
-    { id: "10", name: "Valentina Cruz Herrera", code: "2024010", grade: 9.8, attendance: true }
-  ]);
+  // Load class data and students from API
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const token = tokenService.getToken();
+        if (token) {
+          apiClient.setToken(token);
+        }
+
+        // Get class info
+        const classResponse = await apiClient.classes.getClassById(classId);
+        if (classResponse.success && classResponse.data) {
+          const cls = classResponse.data;
+          setClassInfo({
+            id: cls.id,
+            name: cls.name,
+            subject: cls.subject,
+            schedule: cls.schedule || "Consultar",
+            period: cls.period || "2024-1",
+            teacher: cls.teacher?.name || "Prof. Sin asignar"
+          });
+        }
+
+        // Get students in this class
+        const studentsResponse = await apiClient.classes.getClassStudents(classId);
+        if (studentsResponse.success && studentsResponse.data) {
+          const formattedStudents = studentsResponse.data.map((student: any) => ({
+            id: student.id,
+            name: `${student.first_name || ''} ${student.last_name || ''}`.trim(),
+            code: student.identification_number || student.id,
+            grade: student.grade,
+            attendance: student.attendance !== false
+          }));
+          setStudents(formattedStudents);
+        }
+      } catch (error) {
+        console.error('Error loading class data:', error);
+        toast.error('Error al cargar la clase');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, [classId]);
 
   const filteredStudents = students.filter(student =>
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.code.toLowerCase().includes(searchTerm.toLowerCase())
+    (student.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+    (student.code?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
   );
 
   const handleGradeUpdate = (studentId: string, grade: number) => {
@@ -110,6 +149,61 @@ export function ClassDetail({ classId, onBack }: ClassDetailProps) {
   const handleExportGrades = () => {
     // Simular exportación
     toast.success("Reporte de notas exportado");
+  };
+
+  const handleAddStudents = async (newStudents: any[]) => {
+    try {
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
+
+      // Primero crear los estudiantes si no existen
+      const createStudentsResponse = await apiClient.students.createStudents(
+        newStudents.map(s => ({
+          first_name: s.first_name,
+          last_name: s.last_name,
+          identification_number: s.identification_number,
+          date_of_birth: s.date_of_birth,
+          gender: s.gender
+        }))
+      );
+
+      if (!createStudentsResponse.success) {
+        throw new Error('Error al crear estudiantes');
+      }
+
+      // Extraer IDs de estudiantes creados o existentes
+      const studentIds = createStudentsResponse.data.map((s: any) => s.id);
+
+      // Luego agregar los estudiantes a la clase
+      const addToClassResponse = await apiClient.classes.addStudentsToClass(
+        classId,
+        studentIds
+      );
+
+      if (!addToClassResponse.success) {
+        throw new Error('Error al agregar estudiantes a la clase');
+      }
+
+      toast.success(`${newStudents.length} estudiantes agregados correctamente`);
+      
+      // Recargar estudiantes de la clase
+      const studentsResponse = await apiClient.classes.getClassStudents(classId);
+      if (studentsResponse.success && studentsResponse.data) {
+        const formattedStudents = studentsResponse.data.map((student: any) => ({
+          id: student.id,
+          name: `${student.first_name} ${student.last_name}`,
+          code: student.identification_number || student.id,
+          grade: student.grade,
+          attendance: student.attendance !== false
+        }));
+        setStudents(formattedStudents);
+      }
+    } catch (error: any) {
+      console.error('Error adding students:', error);
+      toast.error(error.message || "Error al agregar estudiantes");
+    }
   };
 
   const getClassStats = () => {
@@ -199,6 +293,13 @@ export function ClassDetail({ classId, onBack }: ClassDetailProps) {
                   onClick={() => toast.success("Lista de estudiantes exportada")}
                 >
                   <Download className="h-4 w-4" />
+                </Button>
+                <Button 
+                  size="icon"
+                  onClick={() => setShowAddStudentsModal(true)}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <UserPlus className="h-4 w-4" />
                 </Button>
               </div>
 
@@ -311,6 +412,15 @@ export function ClassDetail({ classId, onBack }: ClassDetailProps) {
           </div>
         </Tabs>
       </div>
+
+      {/* Add Students Modal */}
+      <AddStudentsModal
+        isOpen={showAddStudentsModal}
+        onClose={() => setShowAddStudentsModal(false)}
+        onSave={handleAddStudents}
+        classId={classId}
+        className={classInfo.name}
+      />
     </div>
   );
 }

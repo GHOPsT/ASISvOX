@@ -1,0 +1,286 @@
+
+════════════════════════════════════════════════════════════════════════════════
+
+    📋 REGLAS DE NEGOCIO - AddClassModal (COORDINACIÓN ANTES DE CÓDIGO)
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+SECCIÓN 1: MATERIAS (SUBJECTS)
+════════════════════════════════════════════════════════════════════════════════
+
+Problema actual:
+├─ SelectTrigger muestra solo 2 opciones (truncado visualmente)
+└─ Usuario no ve el catálogo completo
+
+Reglas de negocio propuestas:
+┌─────────────────────────────────────────────────────────────────────────────
+│ REGLA 1.1: Mostrar TODAS las materias
+│ └─ El Select debe mostrar scroll si hay muchas materias
+│    (no limitado a 2)
+│ 
+│ REGLA 1.2: Ordenamiento
+│ └─ ¿Alfabético? ¿Por código? ¿Por defecto del BD?
+│ 
+│ REGLA 1.3: Filtrado
+│ └─ ¿Solo materias activas (is_active=true)?
+│ └─ ¿O mostrar todas?
+└─────────────────────────────────────────────────────────────────────────────
+
+❓ DECISIONES NECESARIAS:
+  1. ¿Mostrar solo is_active=true?
+  2. ¿Ordenar alfabéticamente o por código?
+
+
+SECCIÓN 2: SECCIÓN (SECTIONS)
+════════════════════════════════════════════════════════════════════════════════
+
+Problema actual:
+├─ SelectTrigger muestra solo 2 opciones
+└─ Usuario debería ver: A, B, C, Sin Sección (completo)
+
+Reglas de negocio propuestas:
+┌─────────────────────────────────────────────────────────────────────────────
+│ REGLA 2.1: Mostrar TODAS las secciones disponibles
+│ └─ Mostrar: A, B, C, ... Sin Sección (sin truncar)
+│ 
+│ REGLA 2.2: Qué es "Sin Sección"
+│ └─ ¿Es una opción en la BD? ¿O se crea dinámicamente?
+│ └─ ¿Se permite crear clase "sin sección"?
+│ 
+│ REGLA 2.3: Ordenamiento
+│ └─ ¿Alphabéticamente? (A, B, C, Sin Sección)
+│ 
+│ REGLA 2.4: Filtrado por grado
+│ └─ ¿Las secciones deben filtrar por grado seleccionado?
+│ └─ Ej: Si selecciono "10°", solo muestro secciones de 10°
+│ └─ Actualmente NO hay filtro por grado
+└─────────────────────────────────────────────────────────────────────────────
+
+❓ DECISIONES NECESARIAS:
+  1. ¿Es obligatorio seleccionar una sección o puede ser vacío?
+  2. ¿Las secciones se filtran por grado de la materia?
+  3. ¿Mostrar "Sin Sección" como opción disponible?
+
+
+SECCIÓN 3: AÑO ACADÉMICO (ACADEMIC YEAR)
+════════════════════════════════════════════════════════════════════════════════
+
+Problema actual:
+├─ Muestra todos los años académicos
+└─ Debería mostrar: año actual y año siguiente (preferencia)
+
+Reglas de negocio propuestas:
+┌─────────────────────────────────────────────────────────────────────────────
+│ REGLA 3.1: Años visibles
+│ └─ Mostrar TODOS los años académicos
+│ 
+│ REGLA 3.2: Año por defecto
+│ └─ Pre-seleccionar el año académico ACTUAL
+│ 
+│ REGLA 3.3: Jerarquía de display
+│ Opción A (recomendada):
+│   1. Ordenar por año DESC (nuevos primero)
+│   2. Marcar el actual con badge "Actual"
+│   3. Mostrar el siguiente con badge "Próximo"
+│ 
+│ Opción B:
+│   1. Mostrar todos sin especial tratamiento
+│
+│ REGLA 3.4: ¿Permitir años pasados?
+│ └─ ¿Permitir crear clases en años académicos anteriores?
+│ └─ Ej: ¿Crear clase en 2024 si estamos en 2025?
+└─────────────────────────────────────────────────────────────────────────────
+
+❓ DECISIONES NECESARIAS:
+  1. ¿Pre-seleccionar el año actual automáticamente?
+  2. ¿Mostrar solo años actuales/futuros o permitir pasados?
+  3. ¿Mostrar badges (Actual/Próximo)?
+
+
+SECCIÓN 4: AULA/SALÓN (CLASSROOM)
+════════════════════════════════════════════════════════════════════════════════
+
+Estado actual: ✅ BIEN
+
+Reglas de negocio acordadas:
+┌─────────────────────────────────────────────────────────────────────────────
+│ REGLA 4.1: Campo opcional
+│ └─ Puede estar vacío
+│ 
+│ REGLA 4.2: Validación
+│ └─ No requiere validación especial
+│ 
+│ REGLA 4.3: Placeholder
+│ └─ "ej. A-101" (actualmente bien)
+└─────────────────────────────────────────────────────────────────────────────
+
+✅ NO CAMBIOS NECESARIOS
+
+
+SECCIÓN 5: DURACIÓN EN SEMANAS (WEEKS_DURATION)
+════════════════════════════════════════════════════════════════════════════════
+
+Problema actual:
+├─ Input tiene value={formData.weeksDuration} con valor 52
+├─ El usuario NO puede borrar el número
+└─ Si lo borra (intenta), se vuelve a poner 52 (hardcodeado)
+
+Requisitos del usuario:
+├─ Campo debe permitir estar COMPLETAMENTE VACÍO
+├─ Por defecto (inicial) debe estar VACÍO
+├─ Si el usuario intenta crear sin llenar → ERROR
+├─ NOT NULL en BD (la restricción)
+
+Reglas de negocio propuestas:
+┌─────────────────────────────────────────────────────────────────────────────
+│ REGLA 5.1: Estado inicial
+│ └─ Campo debe iniciar VACÍO (no con valor 52)
+│ 
+│ REGLA 5.2: Permitir borrado
+│ └─ Usuario DEBE poder dejar el campo completamente vacío
+│ └─ Sin restaurar valor automáticamente
+│ 
+│ REGLA 5.3: Validación
+│ └─ Validar en handleSubmit:
+│    ├─ SI está vacío → ERROR: "Duración en semanas es requerida"
+│    ├─ SI no es número → ERROR
+│    ├─ SI < 1 o > 52 → ERROR: "Debe estar entre 1 y 52 semanas"
+│    └─ SI válido (1-52) → OK
+│ 
+│ REGLA 5.4: Backend
+│ └─ Ya valida: weeksValue = weeks_duration ? parseInt(weeks_duration, 10) : 52
+│ └─ ✅ CORRECTO en backend
+│ 
+│ REGLA 5.5: Input behavior
+│ └─ type="number"
+│ └─ min="1" max="52"
+│ └─ Permitir value="" (campo vacío)
+│ └─ NO restaurar valor si usuario lo borra
+└─────────────────────────────────────────────────────────────────────────────
+
+❓ DECISIONES NECESARIAS:
+  1. ¿Campo es OBLIGATORIO o puede ser null?
+  2. ¿Si está vacío, usar valor por defecto (52) o rechazar?
+  3. ¿Mostrar restricción "1-52 semanas" como ayuda?
+
+
+SECCIÓN 6: HORARIO DE CLASE (SCHEDULES)
+════════════════════════════════════════════════════════════════════════════════
+
+Estado actual: ✅ BIEN
+
+Reglas de negocio validadas en backend:
+┌─────────────────────────────────────────────────────────────────────────────
+│ REGLA 6.1: Day of Week
+│ └─ 0 = Domingo, 1 = Lunes, ..., 6 = Sábado ✅
+│ 
+│ REGLA 6.2: Validación start_time < end_time
+│ └─ Backend valida: end_time > start_time ✅
+│ 
+│ REGLA 6.3: Un horario por día
+│ └─ No puede haber 2 horarios el mismo día (UNIQUE constraint) ✅
+│ 
+│ REGLA 6.4: Horario mínimo
+│ └─ Debe haber al menos 1 horario (validado en handleSubmit) ✅
+│ 
+│ REGLA 6.5: Guardado de horarios
+│ └─ 2 pasos en backend:
+│    1. POST /classes → Crea la clase
+│    2. POST /classes/{classId}/schedules → Agrega horarios
+│ └─ Frontend debe hacer 2 llamadas API
+│ └─ ¿Actualmente lo hace? → VERIFICACIÓN NECESARIA
+│
+│ REGLA 6.6: Cómo se guarda actualmente
+│ └─ En handleSubmit() se llama onSave(newClass) con schedules array
+│ └─ PERO el padre (TeacherDashboard u otro) debe:
+│    ├─ Crear clase vía POST /api/classes
+│    ├─ Luego crear schedules vía POST /api/classes/{id}/schedules
+│ └─ ¿Se está haciendo esto en el componente padre? → VERIFICACIÓN
+└─────────────────────────────────────────────────────────────────────────────
+
+❓ DECISIONES NECESARIAS:
+  1. ¿El AddClassModal hace las 2 llamadas o es responsabilidad del padre?
+  2. ¿Qué pasa si la clase se crea pero fallan los schedules?
+
+
+RESUMEN DE DECISIONES PENDIENTES
+════════════════════════════════════════════════════════════════════════════════
+
+SECCIÓN 1 - MATERIAS:
+  [ ] ¿Mostrar solo materias activas (is_active=true)?
+  [ ] ¿Ordenamiento: alfabético o por código?
+
+SECCIÓN 2 - SECCIÓN:
+  [ ] ¿Obligatorio o puede estar vacío?
+  [ ] ¿Filtrar secciones por grado de la materia?
+  [ ] ¿Mostrar "Sin Sección" como opción?
+
+SECCIÓN 3 - AÑO ACADÉMICO:
+  [ ] ¿Pre-seleccionar el año actual?
+  [ ] ¿Permitir años pasados?
+  [ ] ¿Mostrar badges (Actual/Próximo)?
+
+SECCIÓN 5 - DURACIÓN SEMANAS:
+  [ ] ¿Es obligatorio rellenar?
+  [ ] ¿Valor por defecto si vacío?
+  [ ] ¿Mostrar ayuda "1-52 semanas"?
+
+SECCIÓN 6 - HORARIOS:
+  [ ] ¿AddClassModal maneja las 2 llamadas API?
+  [ ] ¿Qué sucede si falla uno de los POST?
+
+
+FLUJO ACTUAL (VERIFICACIÓN COMPLETADA)
+════════════════════════════════════════════════════════════════════════════════
+
+❌ PROBLEMA ENCONTRADO:
+
+Actualmente en handleAddClass (TeacherDashboard.tsx línea 155):
+
+1. AddClassModal recolecta schedules en el array
+2. Llama onSave(newClass) con { schedules: [...] }
+3. PERO TeacherDashboard.handleAddClass() IGNORA los schedules
+4. Solo envía: subjectId, sectionId, academicYearId, classroom, weeksDuration
+5. POST /api/classes se ejecuta SIN horarios
+6. Los schedules NUNCA se guardan en BD
+
+RESULTADO: 
+├─ ✅ La clase se crea
+└─ ❌ Los horarios se pierden (tabla schedules vacía)
+
+
+SOLUCIÓN: Opción B (RECOMENDADA)
+════════════════════════════════════════════════════════════════════════════════
+
+AddClassModal debe hacer AMBAS llamadas API:
+
+1. AddClassModal.handleSubmit():
+   ├─ Valida formData
+   ├─ POST /api/classes → obtiene response.data.id
+   ├─ POST /api/classes/{id}/schedules → guarda horarios
+   ├─ SI TODO OK → llama onSave(newClass)
+   ├─ SI FALLA → muestra error, NO llama onSave (modal no cierra)
+   └─ Esto garantiza: clases + horarios SIEMPRE juntos
+
+2. TeacherDashboard.handleAddClass():
+   ├─ Solo recibe newClass ya guardado
+   ├─ Actualiza UI: setClasses([...classes, newClass])
+   ├─ Guarda en localStorage
+   └─ Cierra modal
+
+VENTAJAS:
+├─ AddClassModal es responsable de guardar lo que recolecta
+├─ Transacción lógica completa (todo o nada)
+├─ Mejor manejo de errores
+├─ Mejor UX (error en modal, no cierra hasta arreglarlo)
+├─ Separación clara: Modal = guardar datos, Padre = mostrar datos
+
+GARANTÍA: 
+└─ "No debe dejar crear la clase sin los horarios" ✅ CUMPLIDO
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+════════════════════════════════════════════════════════════════════════════════

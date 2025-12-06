@@ -3,7 +3,7 @@
 // CONTROLADOR DE CLASES
 // ===============================
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSchedule = exports.updateSchedule = exports.getSchedules = exports.createSchedules = exports.getTeacherClasses = exports.getClassStudents = exports.deleteClass = exports.updateClass = exports.createClass = exports.getClassById = exports.getClasses = void 0;
+exports.addStudentsToClass = exports.deleteSchedule = exports.updateSchedule = exports.getSchedules = exports.createSchedules = exports.getTeacherClasses = exports.getClassStudents = exports.deleteClass = exports.updateClass = exports.createClass = exports.getClassById = exports.getClasses = void 0;
 const errorHandler_1 = require("../middleware/errorHandler");
 const connection_1 = require("../config/connection");
 // ===============================
@@ -19,8 +19,8 @@ const findClassWithDetails = async (classId) => {
         ay.name as academic_year_name,
         u.full_name as teacher_name, u.email as teacher_email,
         e.name as entity_name,
-        COUNT(DISTINCT en.student_id) as student_count,
-        COALESCE(AVG(gr.score), 0) as average_grade
+        COUNT(DISTINCT CASE WHEN en.student_id IS NOT NULL THEN en.student_id END) as student_count,
+        0 as average_grade
      FROM classes c
      JOIN subjects sub ON c.subject_id = sub.id
      JOIN sections sec ON c.section_id = sec.id
@@ -31,7 +31,6 @@ const findClassWithDetails = async (classId) => {
      LEFT JOIN enrollments en ON sec.id = en.section_id 
        AND en.academic_year_id = c.academic_year_id 
        AND en.status = 'active'
-     LEFT JOIN grades_records gr ON en.student_id = gr.student_id
      WHERE c.id = $1
      GROUP BY c.id, sub.id, sec.id, g.id, ay.id, u.id, e.id`, [classId]);
     return result.rows[0];
@@ -66,6 +65,9 @@ const mapClassToResponse = (dbClass) => {
         averageGrade: parseFloat(dbClass.average_grade) || 0,
         academicYear: dbClass.academic_year_name,
         isActive: dbClass.is_active,
+        schedules: dbClass.schedules && Array.isArray(dbClass.schedules)
+            ? dbClass.schedules.filter((sch) => sch && sch.id)
+            : [],
         createdAt: new Date(dbClass.created_at),
         updatedAt: new Date(dbClass.updated_at),
     };
@@ -121,8 +123,15 @@ exports.getClasses = (0, errorHandler_1.asyncHandler)(async (req, res) => {
       ay.name as academic_year_name,
       u.full_name as teacher_name, u.email as teacher_email,
       e.name as entity_name,
-      COUNT(DISTINCT en.student_id) as student_count,
-      COALESCE(AVG(gr.score), 0) as average_grade
+      COUNT(DISTINCT CASE WHEN en.student_id IS NOT NULL THEN en.student_id END) as student_count,
+      0 as average_grade,
+      json_agg(json_build_object(
+        'id', sch.id,
+        'classId', sch.class_id,
+        'dayOfWeek', sch.day_of_week,
+        'startTime', sch.start_time,
+        'endTime', sch.end_time
+      ) ORDER BY sch.day_of_week) FILTER (WHERE sch.id IS NOT NULL) as schedules
     FROM classes c
     JOIN subjects sub ON c.subject_id = sub.id
     JOIN sections sec ON c.section_id = sec.id
@@ -133,7 +142,7 @@ exports.getClasses = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     LEFT JOIN enrollments en ON sec.id = en.section_id 
       AND en.academic_year_id = c.academic_year_id 
       AND en.status = 'active'
-    LEFT JOIN grades_records gr ON en.student_id = gr.student_id
+    LEFT JOIN schedules sch ON c.id = sch.class_id
     ${whereClause}
     GROUP BY c.id, sub.id, sec.id, g.id, ay.id, u.id, e.id
     ORDER BY c.created_at DESC
@@ -197,8 +206,9 @@ exports.createClass = (0, errorHandler_1.asyncHandler)(async (req, res) => {
         throw (0, errorHandler_1.createError)('Solo teachers pueden crear clases', 403);
     }
     // REGLA: Teacher debe tener entityId
+    // Tanto profesores de entidad como independientes tienen entity_id asignado
     if (!req.user.entityId) {
-        throw (0, errorHandler_1.createError)('Teacher debe pertenecer a una entidad', 400);
+        throw (0, errorHandler_1.createError)('Profesor debe estar asociado a una entidad o ser independiente con entidad asignada', 400);
     }
     // Validar que la sección existe y pertenece a la entidad
     const sectionResult = await (0, connection_1.query)(`SELECT sec.id, sec.grade_id 
@@ -390,8 +400,8 @@ exports.getTeacherClasses = (0, errorHandler_1.asyncHandler)(async (req, res) =>
       ay.name as academic_year_name, ay.is_current,
       u.full_name as teacher_name, u.email as teacher_email,
       e.name as entity_name,
-      COUNT(DISTINCT en.student_id) as student_count,
-      COALESCE(AVG(gr.score), 0) as average_grade
+      COUNT(DISTINCT CASE WHEN en.student_id IS NOT NULL THEN en.student_id END) as student_count,
+      0 as average_grade
     FROM classes c
     JOIN subjects sub ON c.subject_id = sub.id
     JOIN sections sec ON c.section_id = sec.id
@@ -402,7 +412,6 @@ exports.getTeacherClasses = (0, errorHandler_1.asyncHandler)(async (req, res) =>
     LEFT JOIN enrollments en ON sec.id = en.section_id 
       AND en.academic_year_id = c.academic_year_id 
       AND en.status = 'active'
-    LEFT JOIN grades_records gr ON en.student_id = gr.student_id
     WHERE c.teacher_id = $1 AND c.is_active = true
     GROUP BY c.id, sub.id, sec.id, g.id, ay.id, u.id, e.id
     ORDER BY ay.is_current DESC, c.created_at DESC
@@ -639,5 +648,91 @@ exports.deleteSchedule = (0, errorHandler_1.asyncHandler)(async (req, res) => {
         timestamp: new Date(),
     };
     res.status(200).json(response);
+});
+// ===============================
+// AGREGAR ESTUDIANTES A UNA CLASE
+// ===============================
+exports.addStudentsToClass = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { classId } = req.params;
+    const { studentIds } = req.body;
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'Debes proporcionar un array de IDs de estudiantes'
+        });
+    }
+    // Verificar que la clase existe
+    const classResult = await (0, connection_1.query)('SELECT id, section_id, academic_year_id FROM classes WHERE id = $1', [classId]);
+    if (classResult.rows.length === 0) {
+        return res.status(404).json({
+            success: false,
+            message: 'Clase no encontrada'
+        });
+    }
+    const { section_id: sectionId, academic_year_id: academicYearId } = classResult.rows[0];
+    // Obtener información de la sección para validar límite
+    const sectionResult = await (0, connection_1.query)('SELECT max_students FROM sections WHERE id = $1', [sectionId]);
+    const maxStudents = sectionResult.rows[0]?.max_students || 30;
+    // Contar estudiantes ya enrollados en esta sección
+    const countResult = await (0, connection_1.query)(`SELECT COUNT(DISTINCT student_id) as count 
+     FROM enrollments 
+     WHERE section_id = $1 AND academic_year_id = $2 AND status = 'active'`, [sectionId, academicYearId]);
+    const currentCount = parseInt(countResult.rows[0].count);
+    // Validar que no exceda el límite
+    if (currentCount + studentIds.length > maxStudents) {
+        return res.status(400).json({
+            success: false,
+            message: `No se pueden agregar ${studentIds.length} estudiantes. La clase tiene máximo ${maxStudents} lugares. Estudiantes actuales: ${currentCount}`
+        });
+    }
+    const addedEnrollments = [];
+    const errors = [];
+    // Agregar cada estudiante a la sección (enrollments)
+    for (const studentId of studentIds) {
+        try {
+            // Verificar que el estudiante existe
+            const studentResult = await (0, connection_1.query)('SELECT id, first_name, last_name FROM students WHERE id = $1 AND is_active = true', [studentId]);
+            if (studentResult.rows.length === 0) {
+                errors.push({
+                    studentId,
+                    error: 'Estudiante no encontrado o inactivo'
+                });
+                continue;
+            }
+            // Verificar si ya está enrollado en esta sección
+            const existingEnrollment = await (0, connection_1.query)(`SELECT id FROM enrollments 
+         WHERE student_id = $1 AND section_id = $2 AND academic_year_id = $3`, [studentId, sectionId, academicYearId]);
+            if (existingEnrollment.rows.length > 0) {
+                addedEnrollments.push({
+                    studentId,
+                    status: 'already_enrolled',
+                    message: `${studentResult.rows[0].first_name} ${studentResult.rows[0].last_name} ya está enrollado`
+                });
+                continue;
+            }
+            // Crear enrollment
+            const enrollmentResult = await (0, connection_1.query)(`INSERT INTO enrollments (student_id, section_id, academic_year_id, enrollment_date, status)
+         VALUES ($1, $2, $3, CURRENT_DATE, 'active')
+         RETURNING id, student_id, enrollment_date`, [studentId, sectionId, academicYearId]);
+            addedEnrollments.push({
+                enrollmentId: enrollmentResult.rows[0].id,
+                studentId,
+                studentName: `${studentResult.rows[0].first_name} ${studentResult.rows[0].last_name}`,
+                status: 'enrolled'
+            });
+        }
+        catch (error) {
+            errors.push({
+                studentId,
+                error: error.message
+            });
+        }
+    }
+    res.status(201).json({
+        success: true,
+        message: `${addedEnrollments.length} estudiante(s) agregado(s) a la clase`,
+        data: addedEnrollments,
+        errors: errors.length > 0 ? errors : undefined
+    });
 });
 //# sourceMappingURL=class.controller.js.map

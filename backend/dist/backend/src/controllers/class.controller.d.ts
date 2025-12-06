@@ -10,4 +10,5 @@ export declare const createSchedules: (req: import("express").Request, res: Resp
 export declare const getSchedules: (req: import("express").Request, res: Response, next: import("express").NextFunction) => void;
 export declare const updateSchedule: (req: import("express").Request, res: Response, next: import("express").NextFunction) => void;
 export declare const deleteSchedule: (req: import("express").Request, res: Response, next: import("express").NextFunction) => void;
+export declare const addStudentsToClass: (req: import("express").Request, res: Response, next: import("express").NextFunction) => void;
 //# sourceMappingURL=class.controller.d.ts.map

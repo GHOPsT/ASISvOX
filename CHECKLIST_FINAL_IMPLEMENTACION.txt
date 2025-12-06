@@ -1,0 +1,372 @@
+
+════════════════════════════════════════════════════════════════════════════════
+
+    ✅ CHECKLIST FINAL - Pasos para Implementación AddClassModal
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+PASO 1: Agregar método createSchedules a ClassAPI
+════════════════════════════════════════════════════════════════════════════════
+
+Archivo: shared/api/interfaces.ts
+Línea: ~232 (después de removeStudentFromClass)
+
+Agregar:
+```typescript
+  // POST /api/classes/:id/schedules
+  createSchedules(classId: string, body: { schedules: any[] }): Promise<ApiResponse<any>>;
+  
+  // GET /api/classes/:id/schedules (opcional, para futuro)
+  getSchedules?(classId: string): Promise<ApiResponse<any[]>>;
+  
+  // DELETE /api/classes/:id/schedules/:scheduleId (opcional, para futuro)
+  deleteSchedule?(classId: string, scheduleId: string): Promise<ApiResponse<void>>;
+```
+
+✅ PRIORIDAD: ALTA (necesario para AddClassModal)
+
+
+PASO 2: Implementar createSchedules en apiClient
+════════════════════════════════════════════════════════════════════════════════
+
+Archivo: frontend/src/services/api.ts
+Línea: ~314 (dentro del classes property, después de removeStudentFromClass)
+
+Agregar:
+```typescript
+    createSchedules: async (classId: string, body: any): Promise<ApiResponse<any>> => {
+      return this.post<ApiResponse<any>>(`/classes/${classId}/schedules`, body);
+    },
+
+    getSchedules: async (classId: string): Promise<ApiResponse<any[]>> => {
+      return this.get<ApiResponse<any[]>>(`/classes/${classId}/schedules`);
+    },
+
+    deleteSchedule: async (classId: string, scheduleId: string): Promise<ApiResponse<void>> => {
+      return this.delete<ApiResponse<void>>(`/classes/${classId}/schedules/${scheduleId}`);
+    },
+```
+
+✅ PRIORIDAD: ALTA (necesario para AddClassModal)
+
+
+PASO 3: Modificar seed.sql - Agregar "Sin Sección"
+════════════════════════════════════════════════════════════════════════════════
+
+Archivo: backend/seed.sql
+Línea: ~110 (después de INSERT INTO sections B)
+
+Agregar para GRADO 10:
+```sql
+INSERT INTO sections (grade_id, name, academic_year_id, max_students, is_active) 
+SELECT v_grade_10_id, 'Sin Sección', v_academic_year_id, 999, true
+WHERE NOT EXISTS (
+    SELECT 1 FROM sections 
+    WHERE grade_id = v_grade_10_id AND name = 'Sin Sección' 
+    AND academic_year_id = v_academic_year_id
+);
+```
+
+Agregar para GRADO 11:
+```sql
+INSERT INTO sections (grade_id, name, academic_year_id, max_students, is_active) 
+SELECT v_grade_11_id, 'Sin Sección', v_academic_year_id, 999, true
+WHERE NOT EXISTS (
+    SELECT 1 FROM sections 
+    WHERE grade_id = v_grade_11_id AND name = 'Sin Sección' 
+    AND academic_year_id = v_academic_year_id
+);
+```
+
+Luego ejecutar:
+```bash
+cd backend
+npm run init-db
+```
+
+✅ PRIORIDAD: MEDIA (necesario para mostrar "Sin Sección")
+
+
+PASO 4: Implementar AddClassModal.tsx - REFACTOR COMPLETO
+════════════════════════════════════════════════════════════════════════════════
+
+Archivo: frontend/src/components/AddClassModal.tsx
+
+CAMBIOS PRINCIPALES:
+
+1. ✅ Imports - Agregar toast si no está
+   └─ import { toast } from "sonner";
+
+2. ✅ Funciones auxiliares (agregar antes del return)
+   ```typescript
+   // Determinar año académico actual
+   const getCurrentAcademicYear = (years: any[]) => {
+     let current = years.find(y => y.is_current === true);
+     if (!current) {
+       const today = new Date();
+       current = years.find(y => {
+         const startDate = new Date(y.start_date);
+         const endDate = new Date(y.end_date);
+         return today >= startDate && today <= endDate;
+       });
+     }
+     return current;
+   };
+   
+   // Determinar si es año siguiente
+   const isNextYear = (year: any) => {
+     const today = new Date();
+     const startDate = new Date(year.start_date);
+     const currentYear = getCurrentAcademicYear(academicYears);
+     return year.id !== currentYear?.id && startDate > today;
+   };
+   
+   // Filtrar años futuros
+   const today = new Date();
+   const futureAcademicYears = academicYears.filter(year => {
+     const endDate = new Date(year.end_date);
+     return endDate >= today;
+   });
+   ```
+
+3. ✅ State - Cambiar weeksDuration a ""
+   ```typescript
+   const [formData, setFormData] = useState({
+     subjectId: "",
+     sectionId: "",
+     academicYearId: "",
+     classroom: "",
+     weeksDuration: "",  // ← CAMBIAR (antes era 52)
+     schedules: []
+   });
+   ```
+
+4. ✅ useEffect - Pre-seleccionar año actual
+   ```typescript
+   useEffect(() => {
+     if (isOpen && futureAcademicYears.length > 0 && !formData.academicYearId) {
+       const currentYear = getCurrentAcademicYear(futureAcademicYears);
+       if (currentYear) {
+         setFormData(prev => ({ ...prev, academicYearId: currentYear.id }));
+       }
+     }
+   }, [isOpen, futureAcademicYears, formData.academicYearId]);
+   ```
+
+5. ✅ Orden alfabético en Selects
+   ```typescript
+   // Materias
+   const sortedSubjects = subjects
+     .filter(s => s.is_active === true)
+     .sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true }));
+   
+   // Secciones
+   const sortedSections = sections
+     .sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true }));
+   ```
+
+6. ✅ Validación en handleSubmit
+   ```typescript
+   // Validar weeksDuration
+   if (!formData.weeksDuration) {
+     toast.error("Duración en semanas es requerida");
+     return;
+   }
+   
+   const weeks = parseInt(formData.weeksDuration);
+   if (isNaN(weeks) || weeks < 1 || weeks > 52) {
+     toast.error("Duración debe estar entre 1 y 52 semanas");
+     return;
+   }
+   ```
+
+7. ✅ handleSubmit - OPCIÓN B (Ambas API calls)
+   ```typescript
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+     
+     // Validaciones...
+     if (!formData.subjectId || !formData.sectionId || !formData.academicYearId) {
+       toast.error("Por favor completa los campos básicos");
+       return;
+     }
+     
+     if (!formData.weeksDuration) {
+       toast.error("Duración en semanas es requerida");
+       return;
+     }
+     
+     const weeks = parseInt(formData.weeksDuration);
+     if (isNaN(weeks) || weeks < 1 || weeks > 52) {
+       toast.error("Duración debe estar entre 1 y 52 semanas");
+       return;
+     }
+     
+     if (formData.schedules.length === 0) {
+       toast.error("Por favor agrega al menos un horario");
+       return;
+     }
+
+     setIsLoading(true);
+     try {
+       // PASO 1: Crear clase
+       const classResponse = await apiClient.classes.createClass({
+         subjectId: formData.subjectId,
+         sectionId: formData.sectionId,
+         academicYearId: formData.academicYearId,
+         classroom: formData.classroom || "",
+         weeksDuration: weeks
+       });
+
+       if (!classResponse.success || !classResponse.data?.id) {
+         throw new Error("Error al crear la clase");
+       }
+
+       // PASO 2: Crear horarios
+       const schedulesResponse = await apiClient.classes.createSchedules(
+         classResponse.data.id,
+         { schedules: formData.schedules }
+       );
+
+       if (!schedulesResponse.success) {
+         throw new Error("Error al guardar los horarios");
+       }
+
+       // ✅ TODO OK
+       onSave(classResponse.data);
+       
+       setFormData({
+         subjectId: "",
+         sectionId: "",
+         academicYearId: "",
+         classroom: "",
+         weeksDuration: "",
+         schedules: []
+       });
+       
+       toast.success("Clase y horarios creados exitosamente");
+       onClose();
+
+     } catch (error) {
+       console.error("Error:", error);
+       toast.error(`Error: ${error instanceof Error ? error.message : "Desconocido"}`);
+       // Modal NO cierra → usuario puede corregir
+     } finally {
+       setIsLoading(false);
+     }
+   };
+   ```
+
+8. ✅ SELECT - Años académicos CON badges
+   ```typescript
+   <Select value={formData.academicYearId} onValueChange={...}>
+     <SelectTrigger>
+       <SelectValue placeholder="Seleccionar año" />
+     </SelectTrigger>
+     <SelectContent>
+       {futureAcademicYears.map(year => (
+         <SelectItem key={year.id} value={year.id}>
+           {year.name}
+           {year.id === getCurrentAcademicYear(futureAcademicYears)?.id && ' (Actual)'}
+           {isNextYear(year) && ' (Próximo)'}
+         </SelectItem>
+       ))}
+     </SelectContent>
+   </Select>
+   ```
+
+9. ✅ INPUT - weeksDuration sin hardcode
+   ```typescript
+   <Label htmlFor="weeksDuration">Duración (Semanas) *</Label>
+   <Input
+     id="weeksDuration"
+     type="number"
+     min="1"
+     max="52"
+     value={formData.weeksDuration}
+     onChange={(e) => setFormData(prev => ({ 
+       ...prev, 
+       weeksDuration: e.target.value 
+     }))}
+     placeholder="Ej: 36"
+   />
+   <p className="text-xs text-gray-500">¿Cuántas semanas durará esta clase? (1-52)</p>
+   ```
+
+✅ PRIORIDAD: ALTA (main implementation)
+
+
+PASO 5: Simplificar TeacherDashboard.tsx - handleAddClass
+════════════════════════════════════════════════════════════════════════════════
+
+Archivo: frontend/src/components/TeacherDashboard.tsx
+Línea: ~155 (handleAddClass function)
+
+Simplificar:
+```typescript
+const handleAddClass = async (classData: any) => {
+  try {
+    // classData ya tiene: id, name, subject, etc.
+    // AddClassModal ya guardó los horarios
+    
+    const mappedClass = {
+      id: classData.id,
+      name: classData.name,
+      subject: classData.subject,
+      classroom: classData.classroom || "",
+      studentCount: 0,
+      averageGrade: 0,
+      nextClass: "Por programar",
+      students: [],
+      academicYear: classData.academicYear,
+      isCurrent: classData.isCurrent,
+      createdAt: classData.createdAt,
+      isActive: classData.isActive,
+      schedules: classData.schedules || []  // ← Ahora incluye schedules
+    };
+    
+    const newClasses = [...classes, mappedClass];
+    setClasses(newClasses);
+    localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(newClasses));
+    
+  } catch (error) {
+    console.error('Error:', error);
+    toast.error('Error al actualizar lista de clases');
+  }
+};
+```
+
+✅ PRIORIDAD: MEDIA (simplificación)
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+ORDEN DE IMPLEMENTACIÓN RECOMENDADO
+════════════════════════════════════════════════════════════════════════════════
+
+1. ✅ PASO 1: Agregar createSchedules a ClassAPI (2 min)
+   └─ shared/api/interfaces.ts
+
+2. ✅ PASO 2: Implementar createSchedules en apiClient (2 min)
+   └─ frontend/src/services/api.ts
+
+3. ✅ PASO 3: Modificar seed.sql + re-ejecutar (1 min)
+   └─ backend/seed.sql
+   └─ npm run init-db
+
+4. ✅ PASO 4: REFACTOR AddClassModal.tsx (30 min)
+   └─ Main implementation
+
+5. ✅ PASO 5: Simplificar TeacherDashboard.tsx (5 min)
+   └─ handleAddClass
+
+6. ✅ TEST: Verificar flujo completo
+   └─ Crear clase
+   └─ Verificar horarios se guardan
+
+
+TIEMPO TOTAL ESTIMADO: ~45-60 minutos
+
+
+════════════════════════════════════════════════════════════════════════════════

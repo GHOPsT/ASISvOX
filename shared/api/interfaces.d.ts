@@ -108,12 +108,13 @@ export interface ClassFilters {
     limit?: number;
 }
 export interface CreateClassData {
-    entityId: string;
+    entityId?: string;
     subjectId: string;
     sectionId: string;
     teacherId?: string;
     academicYearId: string;
     classroom?: string;
+    weeksDuration?: number;
 }
 export interface AttendanceAPI {
     getAttendanceSessions(filters?: AttendanceSessionFilters): Promise<PaginatedResponse<AttendanceSession>>;

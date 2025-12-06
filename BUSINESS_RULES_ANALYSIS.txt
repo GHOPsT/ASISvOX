@@ -1,0 +1,220 @@
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║        🎯 ANÁLISIS COORDINADO - "CLASES DE HOY" EN TEACHER DASHBOARD     ║
+║                                                                            ║
+║              Acuerdos sobre Reglas de Negocio y Estructura                ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+
+PUNTO 1: QUIÉN VE "CLASES DE HOY"
+════════════════════════════════════════════════════════════════════════════
+
+✅ ACUERDO:
+   - Solo TEACHER ve la sección "Clases de Hoy"
+   - admin_entity NO ve esta sección (es solo admin)
+   - admin_general NO ve esta sección (es admin global)
+
+📋 Verificación en código:
+   ├─ Backend: getClasses() filtra por role === 'teacher'
+   ├─ Frontend: TeacherDashboard solo se muestra para 'teacher'
+   └─ ✅ YA ESTÁ IMPLEMENTADO
+
+
+PUNTO 2: DOS TIPOS DE PROFESORES
+════════════════════════════════════════════════════════════════════════════
+
+✅ ACUERDO CONFIRMADO:
+
+2A. PROFESOR INDEPENDIENTE (Sin Entidad):
+    ├─ Se auto-registra
+    ├─ entityId = NULL en la BD
+    ├─ VE: Solo las clases que ÉL CREÓ
+    └─ Creador de clases: teacher_id = su propio ID
+
+2B. PROFESOR ASIGNADO (Con Entidad):
+    ├─ Creado por admin_entity de su entidad
+    ├─ entityId = NOT NULL (mismo que admin_entity que lo creó)
+    ├─ VE: Solo las clases que le ASIGNARON
+    └─ Asignado a clases donde: teacher_id = su ID
+
+📋 Cómo diferenciarlo en código:
+   ```
+   user.entityId === null   → Profesor Independiente
+   user.entityId !== null   → Profesor Asignado (creado por admin_entity)
+   ```
+
+📊 En la BD:
+   Users table:
+   ├─ teacher (role='teacher', entity_id=NULL)     → Independiente
+   └─ teacher (role='teacher', entity_id=UUID)     → Asignado
+
+📌 NOTA IMPORTANTE:
+   ├─ Ambos VEN: /classes?teacher_id=usuario.id (sus clases asignadas)
+   ├─ El backend filtra automáticamente por teacher_id
+   └─ La diferencia es el ORIGEN, no lo que ven (los dos ven sus clases)
+
+
+PUNTO 3: INFORMACIÓN DE HORARIOS (SCHEDULES)
+════════════════════════════════════════════════════════════════════════════
+
+✅ ANÁLISIS DE ESTRUCTURA EN BD:
+
+Tabla: schedules
+├─ id (UUID)
+├─ class_id (UUID) → FK a classes
+├─ day_of_week (INTEGER 0-6) → 0=Domingo, 1=Lunes, ..., 6=Sábado
+├─ start_time (TIME)
+├─ end_time (TIME)
+├─ created_at, updated_at
+└─ UNIQUE: (class_id, day_of_week) → Una clase NO puede tener 2 horarios el mismo día
+
+✅ BACKEND - Hay endpoints para schedules:
+
+   POST /classes/{classId}/schedules
+   ├─ Crear horarios para una clase
+   ├─ Body: { schedules: [ { day_of_week, start_time, end_time }, ... ] }
+   └─ Valida: day_of_week (0-6), end_time > start_time
+
+   GET /classes/{classId}/schedules  (OBSERVACIÓN: Verificar si existe)
+   ├─ Obtener horarios de una clase
+   └─ Retorna: Array de schedules
+
+❌ PROBLEMA ACTUAL EN FRONTEND:
+
+   En TeacherDashboard.tsx:
+   ├─ getClasses() retorna clases SIN información de schedules
+   ├─ El mapeo de clases NO incluye schedules
+   ├─ Line 53-64: const mappedClasses = response.data.map(...)
+   │   └─ ❌ NO trae: schedules, day_of_week, start_time, end_time
+   └─ Por eso es imposible determinar "Clases de Hoy"
+
+✅ SOLUCIÓN NECESARIA:
+
+   OPCIÓN A (Recomendada - Backend en una sola llamada):
+   ├─ Modificar getClasses() en backend para incluir schedules
+   ├─ Retornar: { ...class, schedules: [...] }
+   └─ Frontend recibe: class con schedules incluidos
+
+   OPCIÓN B (Dos llamadas - Backend no cambia):
+   ├─ Frontend: Después de getClasses(), llamar getSchedules() para cada clase
+   ├─ Más llamadas = más lento
+   └─ No recomendado
+
+
+PUNTO 4: LÓGICA DE "CLASES DE HOY"
+════════════════════════════════════════════════════════════════════════════
+
+✅ ACUERDO: Opción B es correcta
+   "Clases de Hoy" = Subconjunto filtrado de "Mis Clases"
+
+📌 Definición exacta:
+
+   1. Obtener día actual: day_of_week = new Date().getDay() (0-6)
+   2. En el array "classes", filtrar:
+      ```
+      classesToday = classes.filter(cls => 
+        cls.schedules?.some(sch => sch.day_of_week === dayToday)
+      )
+      ```
+   3. Mostrar solo las primeras 2 (o N) clases de HOY
+   4. Ordenar por: start_time (asc)
+
+   Ejemplo:
+   ├─ Hoy es lunes (day_of_week = 1)
+   ├─ Clase A: tiene horario day_of_week=1, start_time="08:00" → ✅ Incluir
+   ├─ Clase B: tiene horario day_of_week=2, start_time="09:00" → ❌ NO incluir
+   ├─ Clase C: tiene horario day_of_week=1, start_time="10:00" → ✅ Incluir
+   └─ Result: [A, C] ordenadas por start_time
+
+
+PUNTO 5: DIFERENCIA "CLASES DE HOY" vs "MIS CLASES"
+════════════════════════════════════════════════════════════════════════════
+
+✅ ACUERDO CONFIRMADO:
+
+   "Clases de Hoy" (Sección pequeña - línea 242):
+   ├─ Muestra: Clases que tienen horario HOY
+   ├─ Límite: Primeras 2 clases
+   ├─ Propósito: Vista rápida de lo que enseña hoy
+   ├─ Ordenado por: start_time (próxima primero)
+   └─ Con badge: "Próxima" / "Más tarde"
+
+   "Mis Clases" (Sección completa - línea 314):
+   ├─ Muestra: TODAS las clases del profesor
+   ├─ Límite: Sin límite (todas)
+   ├─ Propósito: Gestión completa de clases
+   ├─ Ordenado por: fecha de creación (default)
+   └─ Con opciones: Añadir, buscar, filtrar
+
+
+RESUMEN ESTRUCTURAL ACTUAL
+════════════════════════════════════════════════════════════════════════════
+
+✅ Backend:
+   ├─ Tabla schedules: Existe y bien estructurada
+   ├─ Endpoint POST /classes/{id}/schedules: Crear horarios
+   ├─ getClasses(): Filtra por role === 'teacher'
+   └─ entityId en JWT: Se envía correctamente
+
+✅ Frontend - Auth:
+   ├─ user.entityId: Se obtiene del JWT correctamente
+   ├─ Dos tipos de teacher: Independiente (null) vs Asignado (UUID)
+   └─ Distinción disponible en contexto
+
+❌ Frontend - Clases:
+   ├─ getClasses() NO trae schedules
+   ├─ Imposible determinar "Clases de Hoy"
+   ├─ classesToday está hardcodeado = 2
+   └─ classes.slice(0, 2) muestra primeras 2 sin filtrar por día
+
+
+PLAN DE IMPLEMENTACIÓN
+════════════════════════════════════════════════════════════════════════════
+
+PASO 1: Verificar backend
+   ├─ ¿GET /classes retorna schedules? (NO, según código actual)
+   └─ Decisión: ¿Modificar backend para incluir schedules? O ¿2 llamadas?
+
+PASO 2: Backend (si modificar)
+   ├─ Actualizar query de getClasses()
+   ├─ Agregar JOIN a schedules
+   ├─ Retornar: class + schedules[]
+
+PASO 3: Frontend
+   ├─ Actualizar mapping para incluir schedules
+   ├─ Calcular classesToday dinámicamente
+   ├─ Filtrar por day_of_week actual
+   ├─ Ordenar por start_time
+   └─ Mostrar primeras 2
+
+PASO 4: Testing
+   ├─ Verificar con profesor independiente
+   ├─ Verificar con profesor asignado
+   ├─ Verificar día sin clases
+   └─ Verificar ordenamiento
+
+
+DECISIÓN IMPORTANTE
+════════════════════════════════════════════════════════════════════════════
+
+Necesito que confirmes:
+
+OPCIÓN A (Recomendada):
+✓ Modificar backend: getClasses() retorna class + schedules[]
+✓ Una sola llamada
+✓ Frontend solo mapea y filtra
+✓ Más eficiente, mejor rendimiento
+
+OPCIÓN B (No recomendada):
+✓ Backend sin cambios
+✓ Frontend: getClasses() + luego getSchedules() para cada clase
+✓ N+1 llamadas = lento
+✓ Más complejo en frontend
+
+─────────────────────────────────────────────────────────────────────────────
+
+¿Cuál prefieres?
+
+═════════════════════════════════════════════════════════════════════════════

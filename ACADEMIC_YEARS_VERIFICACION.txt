@@ -1,0 +1,282 @@
+
+════════════════════════════════════════════════════════════════════════════════
+
+    ✅ VERIFICACIÓN COMPLETADA - API academic-years
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+PREGUNTA 4: ESTRUCTURA DEL API - VERIFICADO
+════════════════════════════════════════════════════════════════════════════════
+
+Endpoint: GET /api/master/academic-years
+
+CÓDIGO (master.controller.ts línea 84):
+────────────────────────────────────────
+
+```typescript
+export const getAcademicYears = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const academicYearsResult = await query(
+    `SELECT id, name, start_date, end_date, is_current
+     FROM academic_years
+     ORDER BY name DESC`
+  );
+
+  const response: ApiResponse<any[]> = {
+    success: true,
+    data: academicYearsResult.rows,
+    message: 'Años académicos obtenidos exitosamente',
+    timestamp: new Date(),
+  };
+
+  res.status(200).json(response);
+});
+```
+
+RESPUESTA (estructura JSON):
+───────────────────────────
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-123",
+      "name": "2025",
+      "start_date": "2025-01-01",
+      "end_date": "2025-12-31",
+      "is_current": true
+    },
+    {
+      "id": "uuid-456",
+      "name": "2024",
+      "start_date": "2024-01-01",
+      "end_date": "2024-12-31",
+      "is_current": false
+    }
+  ],
+  "message": "Años académicos obtenidos exitosamente",
+  "timestamp": "2025-12-06T..."
+}
+```
+
+CAMPOS RETORNADOS:
+├─ ✅ id (UUID)
+├─ ✅ name (String)
+├─ ✅ start_date (DATE: "YYYY-MM-DD")
+├─ ✅ end_date (DATE: "YYYY-MM-DD")
+├─ ✅ is_current (Boolean)
+└─ ✅ Ordenados por name DESC (más nuevos primero)
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+TABLA SCHEMA (schema.sql línea 65):
+════════════════════════════════════════════════════════════════════════════════
+
+```sql
+CREATE TABLE academic_years (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    is_current BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+NOTAS:
+├─ is_current: BOOLEAN, default = false
+├─ Solo UNO puede tener is_current = true
+├─ No hay campo "status" (active, closed, etc.)
+└─ Usa start_date y end_date para determinar período
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+DATOS ACTUALES EN BD (seed.sql):
+════════════════════════════════════════════════════════════════════════════════
+
+Actualmente se crea:
+├─ name: "2025"
+├─ start_date: "2025-01-01"
+├─ end_date: "2025-12-31"
+├─ is_current: true
+
+CÓDIGO (seed.sql línea 65):
+```sql
+INSERT INTO academic_years (name, start_date, end_date, is_current) 
+VALUES ('2025', '2025-01-01', '2025-12-31', true)
+```
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+DECISIONES FINALIZADAS
+════════════════════════════════════════════════════════════════════════════════
+
+Basado en la estructura real del API y BD:
+
+PREGUNTA 2 - Año Actual: ✅ OPCIÓN A (Por fecha)
+──────────────────────────
+
+Método para determinar año actual:
+```typescript
+const today = new Date();
+const currentYear = academicYears.find(year => {
+  const startDate = new Date(year.start_date);
+  const endDate = new Date(year.end_date);
+  return today >= startDate && today <= endDate;
+});
+
+// Pre-seleccionar:
+if (currentYear) {
+  setFormData(prev => ({ ...prev, academicYearId: currentYear.id }));
+}
+```
+
+PERO TAMBIÉN EXISTE is_current:
+└─ Alternativa más simple: academicYears.find(y => y.is_current === true)
+└─ Menos lógica, confía en lo que dice la BD
+
+RECOMENDACIÓN:
+└─ Usar AMBAS: primero is_current, si no existe, calcular por fecha
+
+
+PREGUNTA 3 - Filtrar Pasados: ✅ OPCIÓN A (Por fecha)
+──────────────────────────────
+
+Método para filtrar pasados:
+```typescript
+const today = new Date();
+const currentAndFutureYears = academicYears.filter(year => {
+  const endDate = new Date(year.end_date);
+  return endDate >= today;  // No está cerrado (end_date >= hoy)
+});
+```
+
+RESULTADO:
+├─ Si hoy es 2025-12-06
+├─ Años con end_date >= 2025-12-06 se muestran
+├─ Años con end_date < 2025-12-06 se ocultan
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+DECISIÓN PREGUNTA 1 - Sin Sección: ✅ OPCIÓN B
+════════════════════════════════════════════════════════════════════════════════
+
+Usuario decidió: Crear "Sin Sección" en la BD
+
+ACCIONES NECESARIAS:
+
+1. Modificar seed.sql
+   └─ Agregar sección "Sin Sección" para cada grado/año académico
+
+2. Ejemplo a agregar:
+   ```sql
+   INSERT INTO sections (grade_id, name, academic_year_id, max_students, is_active) 
+   SELECT v_grade_10_id, 'Sin Sección', v_academic_year_id, 999, true
+   WHERE NOT EXISTS (
+       SELECT 1 FROM sections 
+       WHERE grade_id = v_grade_10_id AND name = 'Sin Sección' 
+       AND academic_year_id = v_academic_year_id
+   );
+   ```
+
+3. Luego en frontend
+   └─ Ordenar secciones alfabéticamente (A, B, C, Sin Sección)
+   └─ El Select mostrará todas incluyendo "Sin Sección"
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+CÓDIGO PARA IMPLEMENTACIÓN
+════════════════════════════════════════════════════════════════════════════════
+
+OPCIÓN 1 - Usar is_current (simple):
+─────────────────────────────────────
+
+```typescript
+// Pre-seleccionar el año actual
+useEffect(() => {
+  if (academicYears.length > 0 && !formData.academicYearId) {
+    const currentYear = academicYears.find(y => y.is_current === true);
+    if (currentYear) {
+      setFormData(prev => ({ ...prev, academicYearId: currentYear.id }));
+    }
+  }
+}, [academicYears]);
+
+// Filtrar años pasados
+const futureYears = academicYears.filter(year => {
+  const endDate = new Date(year.end_date);
+  return endDate >= new Date();
+});
+```
+
+OPCIÓN 2 - Usar is_current PRIMERO, luego fecha (más robusto):
+─────────────────────────────────────────────────────────────
+
+```typescript
+const getCurrentAcademicYear = (years: any[]) => {
+  // Primero: buscar por is_current
+  let current = years.find(y => y.is_current === true);
+  
+  // Si no existe, calcular por fecha
+  if (!current) {
+    const today = new Date();
+    current = years.find(y => {
+      const startDate = new Date(y.start_date);
+      const endDate = new Date(y.end_date);
+      return today >= startDate && today <= endDate;
+    });
+  }
+  
+  return current;
+};
+
+// Pre-seleccionar
+useEffect(() => {
+  if (academicYears.length > 0 && !formData.academicYearId) {
+    const currentYear = getCurrentAcademicYear(academicYears);
+    if (currentYear) {
+      setFormData(prev => ({ ...prev, academicYearId: currentYear.id }));
+    }
+  }
+}, [academicYears]);
+
+// Filtrar pasados
+const futureYears = academicYears.filter(year => {
+  const endDate = new Date(year.end_date);
+  return endDate >= new Date();
+});
+```
+
+RECOMENDACIÓN:
+└─ OPCIÓN 2 es más robusta y prepara para edge cases
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+SIGUIENTES PASOS
+════════════════════════════════════════════════════════════════════════════════
+
+1. ✅ Confirmar Opción B para "Sin Sección"
+   └─ [ ] Modificar seed.sql para agregar "Sin Sección"
+   └─ [ ] Re-ejecutar init-db para cargar datos
+
+2. ✅ Implementar AddClassModal.tsx con:
+   └─ [ ] Materias: todas, activas, alfabéticamente
+   └─ [ ] Secciones: todas, alfabéticamente (incluyendo "Sin Sección")
+   └─ [ ] Año académico: filtrar futuros, pre-seleccionar actual, con badges
+   └─ [ ] Duración: vacío inicial, validación 1-52
+   └─ [ ] Horarios: Opción B (ambas API calls en modal)
+
+3. ✅ Implementar TeacherDashboard.tsx
+   └─ [ ] Simplificar handleAddClass (solo actualizar UI)
+   └─ [ ] Remover lógica de API calls (ahora en modal)
+
+
+════════════════════════════════════════════════════════════════════════════════

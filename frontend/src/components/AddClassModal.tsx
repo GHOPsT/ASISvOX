@@ -1,8 +1,9 @@
-import { useState, useEffect, type ChangeEvent } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { toast } from "sonner";
 import { apiClient } from "../services/api";
@@ -15,13 +16,13 @@ interface AddClassModalProps {
 }
 
 const DAYS = [
+  { value: 0, label: "Domingo" },
   { value: 1, label: "Lunes" },
   { value: 2, label: "Martes" },
   { value: 3, label: "Miércoles" },
   { value: 4, label: "Jueves" },
   { value: 5, label: "Viernes" },
-  { value: 6, label: "Sábado" },
-  { value: 0, label: "Domingo" }
+  { value: 6, label: "Sábado" }
 ];
 
 export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
@@ -30,7 +31,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
     sectionId: "",
     academicYearId: "",
     classroom: "",
-    weeksDuration: 52, // Nuevo: duración en semanas
+    weeksDuration: "",
     schedules: [] as { day_of_week: number; start_time: string; end_time: string }[]
   });
 
@@ -38,11 +39,48 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
   const [sections, setSections] = useState<any[]>([]);
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newSchedule, setNewSchedule] = useState({
     day_of_week: 1,
     start_time: "08:00",
     end_time: "09:00"
   });
+
+  // ===============================================
+  // HELPER FUNCTIONS
+  // ===============================================
+
+  const getCurrentAcademicYear = (): string => {
+    const current = academicYears.find(y => y.is_current === true);
+    if (current) return current.id;
+    
+    const today = new Date();
+    const activeYear = academicYears.find(y => {
+      const startDate = new Date(y.start_date);
+      const endDate = new Date(y.end_date);
+      return startDate <= today && today <= endDate;
+    });
+    
+    return activeYear?.id || "";
+  };
+
+  const getFilteredAcademicYears = (): any[] => {
+    const today = new Date();
+    return academicYears.filter(y => new Date(y.end_date) >= today);
+  };
+
+  const isNextYear = (year: any): boolean => {
+    const today = new Date();
+    return new Date(year.start_date) > today;
+  };
+
+  const sortByName = (items: any[]): any[] => {
+    return [...items].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  };
+
+  // ===============================================
+  // EFFECTS
+  // ===============================================
 
   // Cargar datos cuando el modal se abre
   useEffect(() => {
@@ -51,18 +89,24 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
     }
   }, [isOpen]);
 
+  // Pre-seleccionar año académico cuando carga
+  useEffect(() => {
+    if (academicYears.length > 0 && !formData.academicYearId) {
+      const preSelectedYear = getCurrentAcademicYear();
+      if (preSelectedYear) {
+        setFormData(prev => ({ ...prev, academicYearId: preSelectedYear }));
+      }
+    }
+  }, [academicYears]);
+
   const loadFormData = async () => {
     setIsLoading(true);
     try {
       const token = tokenService.getToken();
       if (!token) {
-        console.error('No token found');
-        throw new Error('No token found');
+        throw new Error('No se encontró token de autenticación');
       }
 
-      // Cargar datos reales del backend
-      console.log('Loading form data from API...');
-      
       const [subjectsRes, sectionsRes, yearsRes] = await Promise.all([
         fetch('http://localhost:3001/api/master/subjects', {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -75,53 +119,34 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
         })
       ]);
 
-      console.log('Responses:', { subjectsRes: subjectsRes.status, sectionsRes: sectionsRes.status, yearsRes: yearsRes.status });
-
       if (!subjectsRes.ok || !sectionsRes.ok || !yearsRes.ok) {
-        throw new Error(`API error: subjects=${subjectsRes.status}, sections=${sectionsRes.status}, years=${yearsRes.status}`);
+        throw new Error('Error al cargar configuración del servidor');
       }
 
       const subjectsData = await subjectsRes.json();
       const sectionsData = await sectionsRes.json();
       const yearsData = await yearsRes.json();
 
-      console.log('Data received:', { subjects: subjectsData.data?.length, sections: sectionsData.data?.length, years: yearsData.data?.length });
-
       setSubjects(subjectsData.data || []);
       setSections(sectionsData.data || []);
       setAcademicYears(yearsData.data || []);
     } catch (error) {
       console.error('Error loading form data:', error);
-      toast.error(`Error al cargar datos: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      
-      // Fallback a mock data si falla
-      console.log('Using mock data as fallback');
-      const mockSubjects = [
-        { id: "1", name: "Matemáticas" },
-        { id: "2", name: "Física" },
-        { id: "3", name: "Química" },
-      ];
-
-      const mockSections = [
-        { id: "sec1", name: "10°A" },
-        { id: "sec2", name: "10°B" },
-      ];
-
-      const mockAcademicYears = [
-        { id: "ay1", name: "2025" },
-        { id: "ay2", name: "2026" }
-      ];
-
-      setSubjects(mockSubjects);
-      setSections(mockSections);
-      setAcademicYears(mockAcademicYears);
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Desconocido'}`);
+      setSubjects([]);
+      setSections([]);
+      setAcademicYears([]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ===============================================
+  // HANDLERS
+  // ===============================================
+
   const handleAddSchedule = () => {
-    if (!newSchedule.day_of_week || !newSchedule.start_time || !newSchedule.end_time) {
+    if (!newSchedule.start_time || !newSchedule.end_time) {
       toast.error("Por favor completa todos los campos del horario");
       return;
     }
@@ -161,11 +186,18 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // OPCIÓN B: Ambas API calls (crear clase + horarios)
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validaciones
     if (!formData.subjectId || !formData.sectionId || !formData.academicYearId) {
-      toast.error("Por favor completa los campos básicos de la clase");
+      toast.error("Por favor completa los campos obligatorios (Materia, Sección, Año Académico)");
+      return;
+    }
+
+    if (!formData.weeksDuration || parseInt(formData.weeksDuration) < 1 || parseInt(formData.weeksDuration) > 52) {
+      toast.error("Duración debe estar entre 1 y 52 semanas");
       return;
     }
 
@@ -174,36 +206,68 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
       return;
     }
 
-    const subject = subjects.find(s => s.id === formData.subjectId);
-    const section = sections.find(s => s.id === formData.sectionId);
-    const academicYear = academicYears.find(y => y.id === formData.academicYearId);
+    setIsSubmitting(true);
+    try {
+      // STEP 1: Create Class
+      // Backend espera snake_case: subject_id, section_id, academic_year_id, weeks_duration
+      const createClassResponse = await apiClient.classes.createClass({
+        subjectId: formData.subjectId,
+        sectionId: formData.sectionId,
+        academicYearId: formData.academicYearId,
+        classroom: formData.classroom || "",
+        weeksDuration: parseInt(formData.weeksDuration)
+      } as any);
 
-    const newClass = {
-      subjectId: formData.subjectId,
-      sectionId: formData.sectionId,
-      academicYearId: formData.academicYearId,
-      classroom: formData.classroom || "",
-      weeksDuration: formData.weeksDuration,
-      schedules: formData.schedules,
-      // Información adicional
-      _subjectName: subject?.name,
-      _sectionName: section?.name,
-      _academicYearName: academicYear?.name
-    };
+      if (!createClassResponse.success || !createClassResponse.data) {
+        throw new Error("No se pudo crear la clase");
+      }
 
-    onSave(newClass);
-    
-    setFormData({
-      subjectId: "",
-      sectionId: "",
-      academicYearId: "",
-      classroom: "",
-      weeksDuration: 0,
-      schedules: []
-    });
-    
-    toast.success("Clase creada exitosamente");
-    onClose();
+      const newClassId = createClassResponse.data.id;
+
+      // STEP 2: Create Schedules
+      const schedulesForAPI = formData.schedules.map(s => ({
+        dayOfWeek: s.day_of_week,
+        startTime: s.start_time,
+        endTime: s.end_time
+      }));
+
+      await apiClient.classes.createSchedules(newClassId, schedulesForAPI);
+
+      // STEP 3: Success - return full class data
+      const subject = subjects.find(s => s.id === formData.subjectId);
+      const section = sections.find(s => s.id === formData.sectionId);
+      const academicYear = academicYears.find(y => y.id === formData.academicYearId);
+
+      const completeClass = {
+        ...createClassResponse.data,
+        schedules: formData.schedules,
+        _subjectName: subject?.name,
+        _sectionName: section?.name,
+        _academicYearName: academicYear?.name
+      };
+
+      onSave(completeClass);
+      
+      // Reset form
+      setFormData({
+        subjectId: "",
+        sectionId: "",
+        academicYearId: "",
+        classroom: "",
+        weeksDuration: "",
+        schedules: []
+      });
+
+      toast.success("Clase creada exitosamente con horarios");
+      onClose();
+
+    } catch (error) {
+      console.error('Error creating class:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
+      toast.error(`Error: ${errorMsg}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {
@@ -212,7 +276,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
       sectionId: "",
       academicYearId: "",
       classroom: "",
-      weeksDuration: 0,
+      weeksDuration: "",
       schedules: []
     });
     onClose();
@@ -231,6 +295,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
             <h3 className="font-semibold text-sm">Información de la Clase</h3>
             
             <div className="grid grid-cols-2 gap-4">
+              {/* Materia */}
               <div className="space-y-2">
                 <Label htmlFor="subject">Materia *</Label>
                 <Select value={formData.subjectId} onValueChange={(value) => setFormData(prev => ({ ...prev, subjectId: value }))}>
@@ -238,13 +303,14 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                     <SelectValue placeholder="Seleccionar materia" />
                   </SelectTrigger>
                   <SelectContent>
-                    {subjects.map(subject => (
+                    {sortByName(subjects).map(subject => (
                       <SelectItem key={subject.id} value={subject.id}>{subject.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
+              {/* Sección */}
               <div className="space-y-2">
                 <Label htmlFor="section">Sección *</Label>
                 <Select value={formData.sectionId} onValueChange={(value) => setFormData(prev => ({ ...prev, sectionId: value }))}>
@@ -252,7 +318,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                     <SelectValue placeholder="Seleccionar sección" />
                   </SelectTrigger>
                   <SelectContent>
-                    {sections.map(section => (
+                    {sortByName(sections).map(section => (
                       <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -261,6 +327,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              {/* Año Académico con badges */}
               <div className="space-y-2">
                 <Label htmlFor="academicYear">Año Académico *</Label>
                 <Select value={formData.academicYearId} onValueChange={(value) => setFormData(prev => ({ ...prev, academicYearId: value }))}>
@@ -268,13 +335,35 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                     <SelectValue placeholder="Seleccionar año" />
                   </SelectTrigger>
                   <SelectContent>
-                    {academicYears.map(year => (
-                      <SelectItem key={year.id} value={year.id}>{year.name}</SelectItem>
-                    ))}
+                    {getFilteredAcademicYears()
+                      .sort((a, b) => {
+                        // Actual primero, luego próximos
+                        const aIsCurrent = a.is_current;
+                        const bIsCurrent = b.is_current;
+                        if (aIsCurrent && !bIsCurrent) return -1;
+                        if (!aIsCurrent && bIsCurrent) return 1;
+                        // Dentro del mismo grupo, por fecha
+                        return new Date(b.start_date).getTime() - new Date(a.start_date).getTime();
+                      })
+                      .map(year => (
+                        <SelectItem key={year.id} value={year.id}>
+                          <div className="flex items-center gap-2">
+                            <span>{year.name}</span>
+                            {year.is_current && (
+                              <Badge variant="default" className="text-xs">Actual</Badge>
+                            )}
+                            {isNextYear(year) && (
+                              <Badge variant="secondary" className="text-xs">Próximo</Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))
+                    }
                   </SelectContent>
                 </Select>
               </div>
 
+              {/* Aula */}
               <div className="space-y-2">
                 <Label htmlFor="classroom">Aula/Salón</Label>
                 <Input
@@ -282,9 +371,11 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                   value={formData.classroom}
                   onChange={(e) => setFormData(prev => ({ ...prev, classroom: e.target.value }))}
                   placeholder="ej. A-101"
+                  disabled={isLoading || isSubmitting}
                 />
               </div>
 
+              {/* Duración */}
               <div className="space-y-2">
                 <Label htmlFor="weeksDuration">Duración (Semanas) *</Label>
                 <Input
@@ -293,8 +384,10 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                   min="1"
                   max="52"
                   value={formData.weeksDuration}
-                  onChange={(e) => setFormData(prev => ({ ...prev, weeksDuration: parseInt(e.target.value) || 52 }))}
+                  onChange={(e) => setFormData(prev => ({ ...prev, weeksDuration: e.target.value }))}
                   placeholder="ej. 36"
+                  disabled={isLoading || isSubmitting}
+                  required
                 />
                 <p className="text-xs text-gray-500">¿Cuántas semanas durará esta clase?</p>
               </div>
@@ -312,6 +405,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                   <Select 
                     value={newSchedule.day_of_week.toString()} 
                     onValueChange={(value) => setNewSchedule(prev => ({ ...prev, day_of_week: parseInt(value) }))}
+                    disabled={isLoading || isSubmitting}
                   >
                     <SelectTrigger id="dayOfWeek">
                       <SelectValue placeholder="Seleccionar día" />
@@ -331,6 +425,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                     type="time"
                     value={newSchedule.start_time}
                     onChange={(e) => setNewSchedule(prev => ({ ...prev, start_time: e.target.value }))}
+                    disabled={isLoading || isSubmitting}
                   />
                 </div>
 
@@ -341,6 +436,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                     type="time"
                     value={newSchedule.end_time}
                     onChange={(e) => setNewSchedule(prev => ({ ...prev, end_time: e.target.value }))}
+                    disabled={isLoading || isSubmitting}
                   />
                 </div>
               </div>
@@ -350,6 +446,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                 onClick={handleAddSchedule}
                 variant="outline"
                 className="w-full"
+                disabled={isLoading || isSubmitting}
               >
                 + Agregar Horario
               </Button>
@@ -373,6 +470,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                           size="sm"
                           onClick={() => handleRemoveSchedule(index)}
                           className="text-red-600 hover:text-red-700"
+                          disabled={isSubmitting}
                         >
                           Eliminar
                         </Button>
@@ -389,17 +487,18 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
             <Button 
               type="button" 
               variant="outline" 
-              onClick={handleClose} 
+              onClick={handleClose}
+              disabled={isLoading || isSubmitting}
               className="flex-1 border-2 border-slate-300 dark:border-slate-600"
             >
               Cancelar
             </Button>
             <Button 
               type="submit" 
-              disabled={isLoading} 
+              disabled={isLoading || isSubmitting || formData.schedules.length === 0}
               className="flex-1 border-2 border-primary"
             >
-              Crear Clase
+              {isSubmitting ? "Creando..." : "Crear Clase"}
             </Button>
           </div>
         </form>

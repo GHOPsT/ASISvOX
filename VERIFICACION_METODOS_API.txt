@@ -1,0 +1,115 @@
+
+════════════════════════════════════════════════════════════════════════════════
+
+    🔍 VERIFICACIÓN FINAL - Métodos API Necesarios
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+MÉTODOS USADOS EN AddClassModal
+════════════════════════════════════════════════════════════════════════════════
+
+En el frontend necesitamos:
+
+1. ✅ apiClient.classes.createClass(data)
+   └─ POST /api/classes
+   └─ Body: { subjectId, sectionId, academicYearId, classroom, weeksDuration }
+   └─ Retorna: { success, data: { id, name, subject, ... } }
+   └─ ESTADO: ✅ EXISTE en api.ts línea 290
+
+2. ❌ apiClient.classes.createSchedules(classId, body)
+   └─ POST /api/classes/{classId}/schedules
+   └─ Body: { schedules: [ { day_of_week, start_time, end_time }, ... ] }
+   └─ Retorna: { success, data: [...] }
+   └─ ESTADO: ❌ NO EXISTE - Necesita agregarse
+
+3. ✅ apiClient.master.getSubjects()
+   └─ GET /api/master/subjects
+   └─ Retorna: { success, data: [ { id, name, is_active, ... }, ... ] }
+   └─ ESTADO: ✅ EXISTE
+
+4. ✅ apiClient.master.getSections()
+   └─ GET /api/master/sections
+   └─ Retorna: { success, data: [ { id, name, grade_id, ... }, ... ] }
+   └─ ESTADO: ✅ EXISTE
+
+5. ✅ apiClient.master.getAcademicYears()
+   └─ GET /api/master/academic-years
+   └─ Retorna: { success, data: [ { id, name, start_date, end_date, is_current }, ... ] }
+   └─ ESTADO: ✅ EXISTE
+
+
+PROBLEMA IDENTIFICADO
+════════════════════════════════════════════════════════════════════════════════
+
+El método createSchedules NO existe en el apiClient.
+
+LOCALIZACIÓN:
+├─ Interfaz: shared/api/interfaces.ts línea 206 (ClassAPI)
+└─ Implementación: frontend/src/services/api.ts línea 280 (classes property)
+
+ACCIÓN NECESARIA:
+
+1. Agregar método a ClassAPI interface (shared/api/interfaces.ts)
+2. Implementar método en apiClient (frontend/src/services/api.ts)
+
+
+CÓDIGO A AGREGAR
+════════════════════════════════════════════════════════════════════════════════
+
+En shared/api/interfaces.ts (después de removeStudentFromClass):
+
+```typescript
+  // POST /api/classes/:id/schedules
+  createSchedules(classId: string, body: { schedules: any[] }): Promise<ApiResponse<any>>;
+  
+  // GET /api/classes/:id/schedules
+  getSchedules(classId: string): Promise<ApiResponse<any[]>>;
+  
+  // DELETE /api/classes/:id/schedules/:scheduleId
+  deleteSchedule(classId: string, scheduleId: string): Promise<ApiResponse<void>>;
+```
+
+En frontend/src/services/api.ts (dentro del classes property, después de removeStudentFromClass):
+
+```typescript
+    createSchedules: async (classId: string, body: any): Promise<ApiResponse<any>> => {
+      return this.post<ApiResponse<any>>(`/classes/${classId}/schedules`, body);
+    },
+
+    getSchedules: async (classId: string): Promise<ApiResponse<any[]>> => {
+      return this.get<ApiResponse<any[]>>(`/classes/${classId}/schedules`);
+    },
+
+    deleteSchedule: async (classId: string, scheduleId: string): Promise<ApiResponse<void>> => {
+      return this.delete<ApiResponse<void>>(`/classes/${classId}/schedules/${scheduleId}`);
+    },
+```
+
+
+BACKEND VERIFICATION
+════════════════════════════════════════════════════════════════════════════════
+
+El endpoint EXISTE en backend:
+
+✅ POST /api/classes/:id/schedules
+   └─ Implementado en class.controller.ts línea 531 (createSchedules)
+   └─ Maneja: { schedules: [ { day_of_week, start_time, end_time }, ... ] }
+
+✅ El endpoint es funcional
+
+
+RESUMEN
+════════════════════════════════════════════════════════════════════════════════
+
+ACCIÓN INMEDIATA NECESARIA:
+
+Agregar createSchedules (y getSchedules, deleteSchedule) al:
+1. shared/api/interfaces.ts (ClassAPI interface)
+2. frontend/src/services/api.ts (apiClient.classes)
+
+DESPUÉS: Proceder con AddClassModal implementation
+
+
+════════════════════════════════════════════════════════════════════════════════
+

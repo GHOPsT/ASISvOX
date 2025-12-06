@@ -4,6 +4,9 @@ import { Button } from "../../components/ui/button";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { apiClient } from "../../services/api";
+import { tokenService } from "../../services/tokenService";
+import { toast } from "sonner";
 
 interface TeacherCalendarViewProps {
   onBack: () => void;
@@ -30,43 +33,35 @@ export function TeacherCalendarView({ onBack }: TeacherCalendarViewProps) {
     loadTeachersWithSchedule();
   }, []);
 
-  const loadTeachersWithSchedule = () => {
-    // Load teachers from user management
-    const storedUsers = JSON.parse(localStorage.getItem('asisVox_users') || '[]');
-    const teacherUsers = storedUsers.filter((user: any) => user.role === 'teacher');
-    
-    // Load assignments
-    const assignments = JSON.parse(localStorage.getItem('asisVox_teacher_assignments') || '[]');
-    
-    // Transform assignments to calendar format
-    const teachersWithSchedule: Teacher[] = teacherUsers.map((teacher: any) => {
-      const assignment = assignments.find((a: any) => a.teacherId === teacher.id);
-      const schedule: { [day: string]: { time: string; subject: string; class: string; room?: string; }[] } = {};
-      
-      if (assignment) {
-        assignment.classes.forEach((cls: any) => {
-          cls.schedule.forEach((slot: any) => {
-            if (!schedule[slot.day]) {
-              schedule[slot.day] = [];
-            }
-            schedule[slot.day].push({
-              time: `${slot.startTime}-${slot.endTime}`,
-              subject: cls.subject,
-              class: `${cls.grade} ${cls.section}`,
-              room: cls.room
-            });
-          });
-        });
+  const loadTeachersWithSchedule = async () => {
+    try {
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
       }
-      
-      return {
-        id: teacher.id,
-        name: teacher.name,
-        schedule
-      };
-    });
-    
-    setTeachers(teachersWithSchedule);
+
+      // Load teachers from API
+      const response = await apiClient.teachers.getTeachers();
+      if (response.success && response.data) {
+        const teachersWithSchedule: Teacher[] = response.data.map((teacher: any) => {
+          // Transform teacher schedule to calendar format
+          // This assumes teacher.schedule is already in the format from the backend
+          const schedule = teacher.schedule || {};
+          
+          return {
+            id: teacher.id,
+            name: teacher.name,
+            schedule
+          };
+        });
+        
+        setTeachers(teachersWithSchedule);
+      }
+    } catch (error) {
+      console.error('Error loading teachers:', error);
+      toast.error('Error al cargar horarios de docentes');
+      setTeachers([]);
+    }
   };
 
   // Keep mock data as fallback for demo purposes

@@ -1,0 +1,181 @@
+
+════════════════════════════════════════════════════════════════════════════════
+
+    🔍 ANÁLISIS: CÓMO SE GUARDA ACTUALMENTE LA CLASE + HORARIOS
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+FLUJO ACTUAL (TeacherDashboard.tsx - handleAddClass)
+════════════════════════════════════════════════════════════════════════════════
+
+PASO 1: AddClassModal.tsx (handleSubmit)
+────────────────────────────────────────────────────────────────────────────────
+
+Valida y llama:
+```
+onSave(newClass) donde newClass = {
+  subjectId: "...",
+  sectionId: "...",
+  academicYearId: "...",
+  classroom: "...",
+  weeksDuration: N,
+  schedules: [  ← IMPORTANTE: INCLUYE HORARIOS
+    { day_of_week: 1, start_time: "08:00", end_time: "09:00" },
+    { day_of_week: 3, start_time: "10:00", end_time: "11:00" }
+  ]
+}
+```
+
+PASO 2: TeacherDashboard.tsx (handleAddClass)
+────────────────────────────────────────────────────────────────────────────────
+
+Recibe newClass con schedules, PERO:
+
+```typescript
+const newClassData = {
+  subjectId: classData.subjectId,
+  sectionId: classData.sectionId,
+  academicYearId: classData.academicYearId,
+  classroom: classData.classroom || "",
+  weeksDuration: classData.weeksDuration || 52
+  // ❌ NO INCLUYE: schedules (SE PIERDEN LOS HORARIOS)
+};
+```
+
+Llama:
+```
+const response = await apiClient.classes.createClass(newClassData);
+```
+
+PROBLEMA IDENTIFICADO
+════════════════════════════════════════════════════════════════════════════════
+
+❌ LOS HORARIOS SE PIERDEN
+
+1. AddClassModal RECOLECTA los horarios (schedules array)
+2. Pasa a TeacherDashboard via onSave(newClass)
+3. TeacherDashboard IGNORA los horarios
+4. Solo envía: subjectId, sectionId, academicYearId, classroom, weeksDuration
+5. POST /api/classes se ejecuta SIN horarios
+
+RESULTADO:
+├─ ✅ La clase se crea
+└─ ❌ Los horarios NUNCA se guardan en la BD
+
+
+SEGUNDO PASO NECESARIO (QUE NO SE ESTÁ HACIENDO)
+════════════════════════════════════════════════════════════════════════════════
+
+Según el backend, después de crear la clase, se DEBE hacer:
+
+```
+POST /api/classes/{classId}/schedules
+Body: {
+  schedules: [
+    { day_of_week: 1, start_time: "08:00", end_time: "09:00" },
+    { day_of_week: 3, start_time: "10:00", end_time: "11:00" }
+  ]
+}
+```
+
+Esto NO está implementado en handleAddClass.
+
+
+BACKEND - createSchedules (línea 531 en class.controller.ts)
+════════════════════════════════════════════════════════════════════════════════
+
+Espera:
+├─ classId: en params
+├─ schedules: array en body
+
+Si NO se ejecuta este endpoint → Los horarios NUNCA se guardan.
+
+
+VERIFICACIÓN EN BD
+════════════════════════════════════════════════════════════════════════════════
+
+Si chequeamos tabla schedules:
+├─ Probablemente está VACÍA o tiene muy pocos registros
+└─ Porque los horarios del AddClassModal NUNCA se guardaron
+
+
+EVIDENCIA EN EL CÓDIGO
+════════════════════════════════════════════════════════════════════════════════
+
+En handleAddClass (línea 170):
+```typescript
+// NOTA: teacherId y entityId se asignan automáticamente en el backend
+```
+
+Pero FALTA comentario importante:
+```typescript
+// ❌ FALTA: Guardar los horarios en la tabla schedules
+// Debería hacer: await apiClient.classes.createSchedules(response.data.id, classData.schedules);
+```
+
+
+FLUJO QUE DEBERÍA SER
+════════════════════════════════════════════════════════════════════════════════
+
+Opción A: AddClassModal maneja TODO
+─────────────────────────────────────
+
+1. AddClassModal.handleSubmit() valida
+2. Llama: onSave(newClass) con schedules
+3. TeacherDashboard.handleAddClass():
+   ├─ Envía POST /api/classes (crea clase)
+   ├─ Obtiene response.data.id
+   ├─ Envía POST /api/classes/{id}/schedules (crea horarios)
+   ├─ Si TODO OK → Actualiza estado
+   ├─ Si falla → ERROR (no actualiza estado)
+
+VENTAJAS: 
+├─ Transacción lógica completa
+├─ Garantiza que si clase se crea, horarios se crean
+├─ Mejor UX (todo o nada)
+
+DESVENTAJAS:
+├─ TeacherDashboard más lógica
+└─ Manejo de errores más complejo
+
+
+Opción B: AddClassModal hace TODO (RECOMENDADA)
+─────────────────────────────────────────────────
+
+1. AddClassModal.handleSubmit() valida
+2. AddClassModal hace ambas llamadas:
+   ├─ POST /api/classes → obtiene id
+   ├─ POST /api/classes/{id}/schedules
+3. Si TODO OK → llama onSave(newClass)
+4. Si falla → muestra error, no llama onSave
+5. TeacherDashboard solo actualiza el estado
+
+VENTAJAS: 
+├─ AddClassModal es responsable del guardado completo
+├─ Separación clara de responsabilidades
+├─ TeacherDashboard solo actualiza UI
+├─ Mejor control de errores
+
+DESVENTAJAS:
+├─ AddClassModal hace 2 API calls
+├─ Más código en AddClassModal
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+RECOMENDACIÓN TÉCNICA
+════════════════════════════════════════════════════════════════════════════════
+
+**Opción B es MEJOR porque:**
+
+1. AddClassModal es un componente de FORMULARIO (responsable de recolectar datos)
+2. Debería ser responsable de GUARDAR esos datos
+3. Solo después de guardar exitosamente → notifica al padre via onSave()
+4. Si falla guardado → muestra error al usuario (sin desaparecer el modal)
+5. El padre (TeacherDashboard) solo actualiza la lista (UI)
+
+Modelo similar a otros modales en aplicaciones profesionales.
+
+
+════════════════════════════════════════════════════════════════════════════════

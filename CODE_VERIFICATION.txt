@@ -1,0 +1,179 @@
+
+════════════════════════════════════════════════════════════════════════════════
+
+           📊 VERIFICACIÓN DE CÓDIGO - QUÉ EXISTE Y QUÉ FALTA
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+EN BACKEND (Ya Existe)
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TABLA schedules EN BD
+   Location: backend/src/schema.sql (línea ~170)
+   
+   CREATE TABLE schedules (
+     id UUID PRIMARY KEY,
+     class_id UUID REFERENCES classes(id),
+     day_of_week INTEGER (0-6),
+     start_time TIME,
+     end_time TIME,
+     created_at TIMESTAMP,
+     updated_at TIMESTAMP
+   );
+
+✅ ENDPOINT: POST /classes/{classId}/schedules
+   Location: backend/src/controllers/class.controller.ts (línea ~520)
+   
+   Función: createSchedules
+   Body: { schedules: [ { day_of_week, start_time, end_time }, ... ] }
+   Response: { success, data: [createdSchedules] }
+
+❓ ENDPOINT: GET /classes/{classId}/schedules
+   Location: backend/src/routes/class.routes.ts
+   Status: ¿Existe? (necesito verificar)
+   
+   Si NO existe:
+   ├─ Necesario crear
+   ├─ Retorna: Schedules de una clase
+   └─ Ruta: GET /api/classes/{classId}/schedules
+
+✅ ENDPOINT: GET /api/classes
+   Location: backend/src/controllers/class.controller.ts (línea ~86)
+   
+   Función: getClasses
+   Filtra por:
+   ├─ role === 'teacher' → Ve solo sus clases
+   ├─ role === 'admin_entity' → Ve solo su entidad
+   └─ role === 'admin_general' → Ve todas
+   
+   Response: { success, data: [classes], pagination }
+   
+   ❌ PROBLEMA:
+   └─ NO incluye schedules en el mapeo (línea 53-64)
+
+✅ USER JWT INCLUYE entityId
+   Location: backend/src/controllers/auth.controller.ts (línea ~51)
+   
+   generateToken incluye:
+   {
+     userId: user.id,
+     email: user.email,
+     role: user.role,
+     entityId: user.entity_id ← AQUÍ
+   }
+
+
+EN FRONTEND (Parcialmente Implementado)
+════════════════════════════════════════════════════════════════════════════════
+
+✅ CONTEXTO AUTH RECIBE entityId
+   Location: frontend/src/contexts/AuthContext.tsx (línea ~12)
+   
+   interface User {
+     id: string;
+     email: string;
+     name: string;
+     role: 'admin_general' | 'admin_entity' | 'teacher';
+     entityId?: string; ← AQUÍ (pero opcional)
+   }
+
+✅ CARGA DE CLASES EN TeacherDashboard
+   Location: frontend/src/components/TeacherDashboard.tsx (línea ~43)
+   
+   useEffect(() => {
+     const response = await apiClient.classes.getClasses();
+     setClasses(mappedClasses);
+   })
+
+✅ MAPEO DE CLASES
+   Location: frontend/src/components/TeacherDashboard.tsx (línea ~53)
+   
+   const mappedClasses = response.data.map((cls: any) => ({
+     id: cls.id,
+     name: cls.name,
+     subject: cls.subject,
+     classroom: cls.classroom,
+     studentCount: cls.studentCount,
+     averageGrade: cls.averageGrade,
+     nextClass: "Por programar",
+     students: cls.students,
+     academicYear: cls.academicYear,
+     isActive: cls.isActive
+     ❌ NO INCLUYE: schedules
+   }))
+
+❌ classesToday HARDCODEADO
+   Location: frontend/src/components/TeacherDashboard.tsx (línea ~92)
+   
+   const teacherData = {
+     classesToday: 2   ← AQUÍ (siempre 2, sin lógica)
+   }
+
+❌ SECCIÓN "CLASES DE HOY" SIN FILTRO
+   Location: frontend/src/components/TeacherDashboard.tsx (línea ~260)
+   
+   {classes.length > 0 ? (
+     classes.slice(0, 2).map((cls, index) => {  ← Siempre primeras 2
+       // Sin considerar día actual
+       // Sin considerar start_time
+     })
+   )}
+
+
+RESUMEN DE ESTADO
+════════════════════════════════════════════════════════════════════════════════
+
+Backend:
+  ✅ Tabla schedules existe
+  ✅ POST /schedules funciona
+  ❓ GET /schedules/{id} (verificar)
+  ❌ GET /classes retorna schedule (NO incluye en mapeo)
+  ✅ JWT incluye entityId
+  ✅ Filtra por teacher correctamente
+
+Frontend:
+  ✅ AuthContext recibe entityId
+  ✅ Carga clases del backend
+  ❌ NO mapea schedules
+  ❌ classesToday está hardcodeado
+  ❌ Sección "Clases de Hoy" sin filtro dinámico
+
+
+PASOS NECESARIOS
+════════════════════════════════════════════════════════════════════════════════
+
+OPCIÓN A (Recomendada - Modificar Backend):
+
+  BACKEND:
+  1. Actualizar getClasses() para incluir schedules
+     └─ Agregar LEFT JOIN schedules en la query
+  
+  2. Modificar mapeo para incluir schedules
+     └─ response.data.map(..., schedules: cls.schedules)
+  
+  3. Verificar/Crear GET /classes/{id}/schedules si no existe
+     └─ Para consistency (aunque no sería usado)
+
+  FRONTEND:
+  1. Agregar schedules al mapeo de clases
+     └─ cls.schedules = response.data[i].schedules
+  
+  2. Calcular classesToday dinámicamente
+     └─ Filtrar por day_of_week actual
+  
+  3. Actualizar sección "Clases de Hoy"
+     └─ Usar classesToday en lugar de classes.slice(0, 2)
+
+
+OPCIÓN B (No Recomendada - Dos Llamadas):
+
+  FRONTEND:
+  1. Después de getClasses(), hacer getSchedules() para cada clase
+  2. Combinar resultados
+  3. Calcular classesToday
+  4. Actualizar UI
+
+─────────────────────────────────────────────────────────────────────────────
+
+═══════════════════════════════════════════════════════════════════════════════

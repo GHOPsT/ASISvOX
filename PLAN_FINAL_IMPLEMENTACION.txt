@@ -1,0 +1,325 @@
+
+════════════════════════════════════════════════════════════════════════════════
+
+    ✅ PLAN FINAL LISTO PARA IMPLEMENTACIÓN - AddClassModal
+
+════════════════════════════════════════════════════════════════════════════════
+
+
+TODAS LAS DECISIONES FINALIZADAS
+════════════════════════════════════════════════════════════════════════════════
+
+1. ✅ MATERIAS
+   └─ Mostrar todas, activas, ordenadas alfabéticamente
+
+2. ✅ SECCIÓN
+   └─ Mostrar todas, alfabéticamente, INCLUYENDO "Sin Sección"
+   └─ Opción B: Crear "Sin Sección" en seed.sql
+
+3. ✅ AÑO ACADÉMICO
+   └─ Mostrar solo años actuales/futuros (filtrar pasados)
+   └─ Pre-seleccionar año actual (por is_current o por fecha)
+   └─ Mostrar badges "Actual" / "Próximo"
+   └─ Ordernar DESC (más nuevos primero)
+
+4. ✅ AULA/SALÓN
+   └─ Sin cambios (campo opcional)
+
+5. ✅ DURACIÓN SEMANAS
+   └─ Iniciar VACÍO
+   └─ Permitir borrado completo
+   └─ Validación: 1-52, obligatorio
+   └─ Mostrar ayuda "1-52 semanas"
+
+6. ✅ HORARIOS
+   └─ OPCIÓN B: AddClassModal hace ambas API calls
+   └─ Transacción: POST /api/classes + POST /api/classes/{id}/schedules
+   └─ Todo o nada (si falla → modal NO cierra)
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+TAREAS INMEDIATAS DE IMPLEMENTACIÓN
+════════════════════════════════════════════════════════════════════════════════
+
+TAREA 1: Modificar seed.sql (agregar "Sin Sección")
+─────────────────────────────────────────────────
+
+Agregar después de las secciones A, B:
+
+```sql
+INSERT INTO sections (grade_id, name, academic_year_id, max_students, is_active) 
+SELECT v_grade_10_id, 'Sin Sección', v_academic_year_id, 999, true
+WHERE NOT EXISTS (
+    SELECT 1 FROM sections 
+    WHERE grade_id = v_grade_10_id AND name = 'Sin Sección' 
+    AND academic_year_id = v_academic_year_id
+);
+
+INSERT INTO sections (grade_id, name, academic_year_id, max_students, is_active) 
+SELECT v_grade_11_id, 'Sin Sección', v_academic_year_id, 999, true
+WHERE NOT EXISTS (
+    SELECT 1 FROM sections 
+    WHERE grade_id = v_grade_11_id AND name = 'Sin Sección' 
+    AND academic_year_id = v_academic_year_id
+);
+```
+
+Luego ejecutar:
+```bash
+cd backend
+npm run init-db  # o ./init-db.sh
+```
+
+
+TAREA 2: Implementar AddClassModal.tsx
+──────────────────────────────────────
+
+CAMBIOS PRINCIPALES:
+
+1. STATE - Agregar isLoadingSubmit
+   ```typescript
+   const [isLoading, setIsLoading] = useState(false);
+   const [isLoadingSubmit, setIsLoadingSubmit] = useState(false);
+   ```
+
+2. FUNCIÓN - getCurrentAcademicYear
+   ```typescript
+   const getCurrentAcademicYear = (years: any[]) => {
+     let current = years.find(y => y.is_current === true);
+     if (!current) {
+       const today = new Date();
+       current = years.find(y => {
+         const startDate = new Date(y.start_date);
+         const endDate = new Date(y.end_date);
+         return today >= startDate && today <= endDate;
+       });
+     }
+     return current;
+   };
+   ```
+
+3. FUNCIÓN - filteredYears (en render)
+   ```typescript
+   const today = new Date();
+   const filteredYears = academicYears.filter(year => {
+     const endDate = new Date(year.end_date);
+     return endDate >= today;
+   });
+   
+   const currentYear = getCurrentAcademicYear(filteredYears);
+   ```
+
+4. useEffect - PRE-SELECCIONAR año actual
+   ```typescript
+   useEffect(() => {
+     if (isOpen && academicYears.length > 0 && !formData.academicYearId) {
+       const currentYear = getCurrentAcademicYear(academicYears);
+       if (currentYear) {
+         setFormData(prev => ({ ...prev, academicYearId: currentYear.id }));
+       }
+     }
+   }, [isOpen, academicYears]);
+   ```
+
+5. VALIDACIÓN - weeksDuration
+   ```typescript
+   if (!formData.weeksDuration) {
+     toast.error("Duración en semanas es requerida");
+     return;
+   }
+   
+   const weeks = parseInt(formData.weeksDuration);
+   if (isNaN(weeks) || weeks < 1 || weeks > 52) {
+     toast.error("Duración debe estar entre 1 y 52 semanas");
+     return;
+   }
+   ```
+
+6. STATE - Inicializar weeksDuration vacío
+   ```typescript
+   const [formData, setFormData] = useState({
+     subjectId: "",
+     sectionId: "",
+     academicYearId: "",
+     classroom: "",
+     weeksDuration: "",  // ← VACÍO (no 52)
+     schedules: []
+   });
+   ```
+
+7. handleSubmit - OPCIÓN B: Ambas API calls
+   ```typescript
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+     
+     // Validaciones
+     if (!formData.subjectId || !formData.sectionId || !formData.academicYearId) {
+       toast.error("Por favor completa los campos básicos");
+       return;
+     }
+     
+     if (!formData.weeksDuration) {
+       toast.error("Duración en semanas es requerida");
+       return;
+     }
+     
+     const weeks = parseInt(formData.weeksDuration);
+     if (isNaN(weeks) || weeks < 1 || weeks > 52) {
+       toast.error("Duración debe estar entre 1 y 52 semanas");
+       return;
+     }
+     
+     if (formData.schedules.length === 0) {
+       toast.error("Por favor agrega al menos un horario");
+       return;
+     }
+
+     setIsLoadingSubmit(true);
+     try {
+       // PASO 1: Crear clase
+       const classResponse = await apiClient.classes.createClass({
+         subjectId: formData.subjectId,
+         sectionId: formData.sectionId,
+         academicYearId: formData.academicYearId,
+         classroom: formData.classroom || "",
+         weeksDuration: weeks
+       });
+
+       if (!classResponse.success || !classResponse.data?.id) {
+         throw new Error("Error al crear la clase");
+       }
+
+       // PASO 2: Crear horarios
+       const schedulesResponse = await apiClient.classes.createSchedules(
+         classResponse.data.id,
+         { schedules: formData.schedules }
+       );
+
+       if (!schedulesResponse.success) {
+         throw new Error("Error al guardar los horarios");
+       }
+
+       // ✅ TODO OK
+       onSave(classResponse.data);
+       
+       setFormData({
+         subjectId: "",
+         sectionId: "",
+         academicYearId: "",
+         classroom: "",
+         weeksDuration: "",
+         schedules: []
+       });
+       
+       toast.success("Clase y horarios creados exitosamente");
+       onClose();
+
+     } catch (error) {
+       console.error("Error:", error);
+       toast.error(`Error: ${error instanceof Error ? error.message : "Desconocido"}`);
+       // Modal NO cierra → usuario puede corregir
+     } finally {
+       setIsLoadingSubmit(false);
+     }
+   };
+   ```
+
+8. SELECT - Secciones ordenadas
+   ```typescript
+   const sortedSections = sections.sort((a, b) => 
+     a.name.localeCompare(b.name, 'es')
+   );
+   ```
+
+9. SELECT - Materias ordenadas + filtradas
+   ```typescript
+   const sortedActiveSubjects = subjects
+     .filter(s => s.is_active === true)
+     .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+   ```
+
+10. SELECT - Años académicos con badges
+    ```typescript
+    <SelectItem value={year.id}>
+      {year.name}
+      {year.id === currentYear?.id && ' (Actual)'}
+      {isNextYear(year) && ' (Próximo)'}
+    </SelectItem>
+    ```
+
+11. INPUT - weeksDuration sin hardcode
+    ```typescript
+    <Input
+      id="weeksDuration"
+      type="number"
+      min="1"
+      max="52"
+      value={formData.weeksDuration}
+      onChange={(e) => setFormData(prev => ({ 
+        ...prev, 
+        weeksDuration: e.target.value 
+      }))}
+      placeholder="Ej: 36"
+    />
+    <p className="text-xs text-gray-500">¿Cuántas semanas durará? (1-52)</p>
+    ```
+
+
+TAREA 3: Simplificar TeacherDashboard.tsx
+──────────────────────────────────────────
+
+handleAddClass ahora recibe clase YA guardada:
+
+```typescript
+const handleAddClass = async (classData: any) => {
+  try {
+    // classData ya tiene: id, name, subject, etc.
+    // Los horarios ya están guardados por AddClassModal
+    
+    const mappedClass = {
+      id: classData.id,
+      name: classData.name,
+      subject: classData.subject,
+      classroom: classData.classroom || "",
+      studentCount: 0,
+      averageGrade: 0,
+      nextClass: "Por programar",
+      students: [],
+      academicYear: classData.academicYear,
+      isCurrent: classData.isCurrent,
+      createdAt: classData.createdAt,
+      isActive: classData.isActive,
+      schedules: classData.schedules || []  // ← Ahora incluye horarios
+    };
+    
+    const newClasses = [...classes, mappedClass];
+    setClasses(newClasses);
+    localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(newClasses));
+    
+  } catch (error) {
+    console.error('Error:', error);
+    toast.error('Error al actualizar lista de clases');
+  }
+};
+```
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+RESUMEN FINAL
+════════════════════════════════════════════════════════════════════════════════
+
+ESTADO: ✅ LISTO PARA IMPLEMENTACIÓN
+
+Decisiones acordadas: ✅ TODAS
+Estructura API verificada: ✅
+BD actualizada: ⏳ Esperar modificación seed.sql
+
+Plan de implementación: ✅ DETALLADO
+Pseudocódigo: ✅ INCLUIDO
+Cambios necesarios: ✅ MAPEADOS
+
+PRÓXIMO PASO: Esperar confirmación para comenzar implementación
+
+════════════════════════════════════════════════════════════════════════════════

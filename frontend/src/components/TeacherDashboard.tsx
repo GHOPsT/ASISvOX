@@ -9,6 +9,7 @@ import { NotificationsPanel } from "./NotificationsPanel";
 import { useAuth } from "../contexts/AuthContext";
 import { apiClient } from "../services/api";
 import { tokenService } from "../services/tokenService";
+import { toast } from "sonner";
 import { 
   Users, 
   BookOpen, 
@@ -34,6 +35,27 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
   const [showAddStudentsModal, setShowAddStudentsModal] = useState(false);
   const [selectedClassForStudents, setSelectedClassForStudents] = useState<any>(null);
   const [classes, setClasses] = useState<any[]>([]);
+
+  // Función para calcular qué clases son de hoy
+  const getClassesToday = () => {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+
+    return classes
+      .filter((cls) => {
+        // Filtrar clases que tengan horario para el día de hoy
+        if (!cls.schedules || cls.schedules.length === 0) return false;
+        return cls.schedules.some((sch: any) => sch.dayOfWeek === dayOfWeek);
+      })
+      .sort((a: any, b: any) => {
+        // Ordenar por hora de inicio (start_time)
+        const aSchedule = a.schedules?.find((s: any) => s.dayOfWeek === dayOfWeek);
+        const bSchedule = b.schedules?.find((s: any) => s.dayOfWeek === dayOfWeek);
+        
+        if (!aSchedule || !bSchedule) return 0;
+        return aSchedule.startTime.localeCompare(bSchedule.startTime);
+      });
+  };
 
   // Load classes from API
   useEffect(() => {
@@ -62,7 +84,8 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
             nextClass: "Por programar",
             students: cls.students || [],
             academicYear: cls.academicYear,
-            isActive: cls.isActive
+            isActive: cls.isActive,
+            schedules: cls.schedules || [] // Incluir horarios desde el backend
           }));
           
           setClasses(mappedClasses);
@@ -87,13 +110,16 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
     loadTeacherClasses();
   }, [user?.id]);
 
+  // Calcular clases de hoy
+  const classesToday = getClassesToday();
+
   // Datos mock del docente
   const teacherData = {
     name: user?.name || "Prof. Usuario",
     totalClasses: classes.length,
     totalStudents: classes.reduce((total, cls) => total + (cls.students?.length || cls.studentCount || 0), 0),
     averageGrade: classes.length > 0 ? (classes.reduce((total, cls) => total + (cls.averageGrade || 0), 0) / classes.length).toFixed(1) : 0,
-    classesToday: 2
+    classesToday: classesToday.length
   };
 
   const quickStats = [
@@ -134,63 +160,101 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
         return;
       }
 
-      // El backend auto-asigna teacherId y entityId, solo enviar: subjectId, sectionId, academicYearId, classroom, weeksDuration
-      const newClassData = {
-        subjectId: classData.subjectId,
-        sectionId: classData.sectionId,
-        academicYearId: classData.academicYearId,
+      // AddClassModal ya hace ambas API calls (crear clase + horarios)
+      // Solo necesitamos actualizar el estado local
+      const mappedClass = {
+        id: classData.id,
+        name: classData.name,
+        subject: classData.subject,
         classroom: classData.classroom || "",
-        weeksDuration: classData.weeksDuration || 52
-        // NOTA: teacherId y entityId se asignan automáticamente en el backend
+        studentCount: 0,
+        averageGrade: 0,
+        nextClass: "Por programar",
+        students: [],
+        schedules: classData.schedules || [],
+        academicYear: classData.academicYear,
+        isCurrent: classData.isCurrent,
+        createdAt: classData.createdAt,
+        isActive: classData.isActive
       };
+      
+      const newClasses = [...classes, mappedClass];
+      setClasses(newClasses);
+      localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(newClasses));
+      
+      toast.success("Clase agregada a tu lista");
+    } catch (error) {
+      console.error('Error in handleAddClass:', error);
+      toast.error("Error al agregar clase a la lista");
+    }
+  };
 
-      // Asegurarse de que el token está configurado
+  const handleAddStudents = async (students: any[]) => {
+    if (!selectedClassForStudents) {
+      toast.error("Clase no seleccionada");
+      return;
+    }
+
+    try {
       const token = tokenService.getToken();
       if (token) {
         apiClient.setToken(token);
       }
 
-      const response = await apiClient.classes.createClass(newClassData as any);
-      
-      if (response.success && response.data) {
-        // Mapear la clase creada al formato esperado
-        const mappedClass = {
-          id: response.data.id,
-          name: response.data.name,
-          subject: response.data.subject,
-          classroom: response.data.classroom || "",
-          studentCount: 0,
-          averageGrade: 0,
-          nextClass: "Por programar",
-          students: [],
-          academicYear: response.data.academicYear,
-          isCurrent: response.data.isCurrent,
-          createdAt: response.data.createdAt,
-          isActive: response.data.isActive
-        };
-        
-        const newClasses = [...classes, mappedClass];
-        setClasses(newClasses);
-        localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(newClasses));
-      } else {
-        throw new Error('Error al crear clase en el servidor');
-      }
-    } catch (error) {
-      console.error('Error creating class:', error);
-    }
-  };
+      // Primero crear los estudiantes si no existen
+      const createStudentsResponse = await apiClient.students.createStudents(
+        students.map(s => ({
+          first_name: s.first_name,
+          last_name: s.last_name,
+          identification_number: s.identification_number,
+          date_of_birth: s.date_of_birth,
+          gender: s.gender
+        }))
+      );
 
-  const handleAddStudents = (students: any[]) => {
-    if (!selectedClassForStudents) return;
-    
-    const updatedClasses = classes.map(cls => 
-      cls.id === selectedClassForStudents.id 
-        ? { ...cls, students: students, studentCount: students.length }
-        : cls
-    );
-    
-    setClasses(updatedClasses);
-    localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(updatedClasses));
+      if (!createStudentsResponse.success) {
+        throw new Error('Error al crear estudiantes');
+      }
+
+      // Extraer IDs de estudiantes creados o existentes
+      const studentIds = createStudentsResponse.data.map((s: any) => s.id);
+
+      // Luego agregar los estudiantes a la clase
+      const addToClassResponse = await apiClient.classes.addStudentsToClass(
+        selectedClassForStudents.id,
+        studentIds
+      );
+
+      if (!addToClassResponse.success) {
+        throw new Error('Error al agregar estudiantes a la clase');
+      }
+
+      toast.success(`${students.length} estudiantes agregados correctamente`);
+      
+      // Recargar las clases para obtener el conteo actualizado
+      const response = await apiClient.classes.getClasses();
+      if (response.success && response.data) {
+        const mappedClasses = response.data.map((cls: any) => ({
+          id: cls.id,
+          name: cls.name,
+          subject: cls.subject,
+          classroom: cls.classroom,
+          studentCount: cls.studentCount || 0,
+          averageGrade: cls.averageGrade || 0,
+          nextClass: "Por programar",
+          students: cls.students || [],
+          academicYear: cls.academicYear,
+          isActive: cls.isActive,
+          schedules: cls.schedules || []
+        }));
+        
+        setClasses(mappedClasses);
+        localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(mappedClasses));
+      }
+    } catch (error: any) {
+      console.error('Error adding students:', error);
+      toast.error(error.message || "Error al agregar estudiantes");
+    }
   };
 
   const handleOpenAddStudents = (classData: any) => {
@@ -255,27 +319,33 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
             </div>
             
             <div className="space-y-2">
-              {classes.length > 0 ? (
-                classes.slice(0, 2).map((cls, index) => (
-                  <div 
-                    key={cls.id} 
-                    className={`flex items-center justify-between p-3 rounded-lg border ${
-                      index === 0 
-                        ? 'bg-primary/5 border-primary/20' 
-                        : 'bg-muted/50 border-muted'
-                    }`}
-                  >
-                    <div>
-                      <p className="font-medium">{cls.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {cls.classroom ? `Aula: ${cls.classroom}` : 'Sin aula asignada'}
-                      </p>
+              {classesToday.length > 0 ? (
+                classesToday.map((cls, index) => {
+                  const today = new Date().getDay();
+                  const todaySchedule = cls.schedules?.find((s: any) => s.dayOfWeek === today);
+                  return (
+                    <div 
+                      key={cls.id} 
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        index === 0 
+                          ? 'bg-primary/5 border-primary/20' 
+                          : 'bg-muted/50 border-muted'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium">{cls.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {todaySchedule ? `${todaySchedule.startTime} - ${todaySchedule.endTime}` : ''}
+                          {todaySchedule && cls.classroom ? ' | ' : ''}
+                          {cls.classroom ? `Aula: ${cls.classroom}` : ''}
+                        </p>
+                      </div>
+                      <Badge variant={index === 0 ? "default" : "outline"}>
+                        {index === 0 ? 'Próxima' : 'Más tarde'}
+                      </Badge>
                     </div>
-                    <Badge variant={index === 0 ? "default" : "outline"}>
-                      {index === 0 ? 'Próxima' : 'Más tarde'}
-                    </Badge>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-center text-muted-foreground py-4">
                   No hay clases programadas para hoy
