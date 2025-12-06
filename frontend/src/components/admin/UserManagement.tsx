@@ -7,7 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Badge } from "../ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Edit, Trash2, Eye, EyeOff, Users, Shield } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash2, Eye, EyeOff, Users, Shield, Loader } from "lucide-react";
+import { apiClient } from "../../services/api";
+import { tokenService } from "../../services/tokenService";
 
 interface User {
   id: string;
@@ -24,6 +26,7 @@ interface UserManagementProps {
 
 export function UserManagement({ onBack }: UserManagementProps) {
   const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({
@@ -37,20 +40,36 @@ export function UserManagement({ onBack }: UserManagementProps) {
     loadUsers();
   }, []);
 
-  const loadUsers = () => {
-    const storedUsers = JSON.parse(localStorage.getItem('asisVox_users') || '[]');
-    const usersWithoutPassword = storedUsers.map((user: any) => {
-      const { password, ...userWithoutPassword } = user;
-      return {
-        ...userWithoutPassword,
-        status: 'active',
-        createdAt: user.createdAt || new Date().toISOString()
-      };
-    });
-    setUsers(usersWithoutPassword);
+  const loadUsers = async () => {
+    try {
+      setIsLoading(true);
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
+
+      const response = await apiClient.users.getUsers();
+      const usersData = response?.data || [];
+      
+      const mappedUsers = usersData.map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role || 'teacher',
+        status: u.status || 'active',
+        createdAt: u.createdAt || u.created_at
+      }));
+      
+      setUsers(mappedUsers);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      toast.error('Error al cargar usuarios');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.email || !formData.password) {
@@ -65,29 +84,25 @@ export function UserManagement({ onBack }: UserManagementProps) {
       return;
     }
 
-    // Check if email already exists
-    const existingUsers = JSON.parse(localStorage.getItem('asisVox_users') || '[]');
-    if (existingUsers.find((u: any) => u.email === formData.email)) {
-      toast.error("Ya existe un usuario con este email");
-      return;
+    try {
+      // Use the register API to create a new user with the appropriate role
+      const response = await apiClient.auth.register({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role === 'admin' ? 'admin_entity' : 'teacher'
+      });
+
+      if (response?.success && response?.data) {
+        toast.success(`${formData.role === 'admin' ? 'Administrador' : 'Profesor'} creado exitosamente`);
+        setFormData({ name: "", email: "", password: "", role: "teacher" });
+        setShowAddUserModal(false);
+        await loadUsers();
+      }
+    } catch (error) {
+      console.error('Error creating user:', error);
+      toast.error('Error al crear usuario');
     }
-
-    const newUser = {
-      id: Date.now().toString(),
-      name: formData.name,
-      email: formData.email,
-      password: formData.password,
-      role: formData.role,
-      createdAt: new Date().toISOString()
-    };
-
-    existingUsers.push(newUser);
-    localStorage.setItem('asisVox_users', JSON.stringify(existingUsers));
-    
-    loadUsers();
-    setFormData({ name: "", email: "", password: "", role: "teacher" });
-    setShowAddUserModal(false);
-    toast.success(`${formData.role === 'admin' ? 'Administrador' : 'Profesor'} creado exitosamente`);
   };
 
   const handleEditUser = (user: User) => {
@@ -101,7 +116,7 @@ export function UserManagement({ onBack }: UserManagementProps) {
     setShowAddUserModal(true);
   };
 
-  const handleUpdateUser = (e: React.FormEvent) => {
+  const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.email) {
@@ -111,35 +126,39 @@ export function UserManagement({ onBack }: UserManagementProps) {
 
     if (!editingUser) return;
 
-    const existingUsers = JSON.parse(localStorage.getItem('asisVox_users') || '[]');
-    const updatedUsers = existingUsers.map((user: any) => {
-      if (user.id === editingUser.id) {
-        return {
-          ...user,
-          name: formData.name,
-          email: formData.email,
-          role: formData.role,
-          ...(formData.password && { password: formData.password })
-        };
+    try {
+      const updateData: Record<string, any> = {
+        name: formData.name,
+        email: formData.email
+      };
+      
+      // Only include password if provided
+      if (formData.password) {
+        updateData.password = formData.password;
       }
-      return user;
-    });
 
-    localStorage.setItem('asisVox_users', JSON.stringify(updatedUsers));
-    loadUsers();
-    setFormData({ name: "", email: "", password: "", role: "teacher" });
-    setEditingUser(null);
-    setShowAddUserModal(false);
-    toast.success("Usuario actualizado exitosamente");
+      await apiClient.users.updateUser(editingUser.id, updateData);
+      toast.success("Usuario actualizado exitosamente");
+      setFormData({ name: "", email: "", password: "", role: "teacher" });
+      setEditingUser(null);
+      setShowAddUserModal(false);
+      await loadUsers();
+    } catch (error) {
+      console.error('Error updating user:', error);
+      toast.error('Error al actualizar usuario');
+    }
   };
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     if (window.confirm("¿Estás seguro de que quieres eliminar este usuario?")) {
-      const existingUsers = JSON.parse(localStorage.getItem('asisVox_users') || '[]');
-      const filteredUsers = existingUsers.filter((user: any) => user.id !== userId);
-      localStorage.setItem('asisVox_users', JSON.stringify(filteredUsers));
-      loadUsers();
-      toast.success("Usuario eliminado exitosamente");
+      try {
+        await apiClient.users.deleteUser(userId);
+        toast.success("Usuario eliminado exitosamente");
+        await loadUsers();
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        toast.error('Error al eliminar usuario');
+      }
     }
   };
 
@@ -201,9 +220,17 @@ export function UserManagement({ onBack }: UserManagementProps) {
       {/* Users List */}
       <div className="space-y-3">
         <h3>Usuarios Registrados</h3>
-        <div className="space-y-3">
-          {users.map((user) => (
-            <Card key={user.id} className="p-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="text-center">
+              <Loader className="h-8 w-8 animate-spin mx-auto mb-4" />
+              <p>Cargando usuarios...</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {users.map((user) => (
+              <Card key={user.id} className="p-4">
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -238,8 +265,9 @@ export function UserManagement({ onBack }: UserManagementProps) {
                 </div>
               </div>
             </Card>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Add/Edit User Modal */}

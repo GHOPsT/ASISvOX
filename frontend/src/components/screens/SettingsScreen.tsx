@@ -1,6 +1,6 @@
-import { Card } from "../../../../components/ui/card";
+import { Card } from "../ui/card";
 import { Button } from "../ui/button";
-import { Switch } from "../../../../components/ui/switch";
+import { Switch } from "../ui/switch";
 import { Badge } from "../ui/badge";
 import { 
   Bell, 
@@ -128,12 +128,12 @@ export function SettingsScreen() {
                   key={itemIndex}
                   className={`flex items-center justify-between p-4 ${
                     itemIndex < group.items.length - 1 ? "border-b" : ""
-                  } ${item.danger ? "hover:bg-red-50" : "hover:bg-muted/50"} transition-colors cursor-pointer`}
+                  } ${(item as any).danger ? "hover:bg-red-50" : "hover:bg-muted/50"} transition-colors cursor-pointer`}
                 >
                   <div className="flex items-center gap-3">
-                    <Icon className={`h-5 w-5 ${item.danger ? "text-red-500" : "text-muted-foreground"}`} />
+                    <Icon className={`h-5 w-5 ${(item as any).danger ? "text-red-500" : "text-muted-foreground"}`} />
                     <div>
-                      <p className={`font-medium ${item.danger ? "text-red-600" : ""}`}>
+                      <p className={`font-medium ${(item as any).danger ? "text-red-600" : ""}`}>
                         {item.label}
                       </p>
                       <p className="text-sm text-muted-foreground">
@@ -143,13 +143,13 @@ export function SettingsScreen() {
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    {item.badge && (
+                    {(item as any).badge && (
                       <Badge variant="secondary" className="text-xs">
-                        {item.badge}
+                        {(item as any).badge}
                       </Badge>
                     )}
                     {item.type === "toggle" ? (
-                      <Switch checked={item.value} />
+                      <Switch checked={(item as any).value || false} />
                     ) : (
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     )}

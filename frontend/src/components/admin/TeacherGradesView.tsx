@@ -4,7 +4,7 @@ import { Button } from "../../components/ui/button";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Input } from "../../components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../../components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 
 interface TeacherGradesViewProps {

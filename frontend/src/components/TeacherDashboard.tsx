@@ -47,23 +47,21 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
           apiClient.setToken(token);
         }
         
-        // Cargar clases desde el API del docente
-        const response = await apiClient.teachers.getTeacherClasses(user.id);
+        // Cargar clases desde el endpoint /classes (filtra automáticamente por teacher para teachers)
+        const response = await apiClient.classes.getClasses();
         
-        if (response.success && response.data) {
+        if (response.success && response.data && Array.isArray(response.data)) {
           // Mapear los datos del backend PostgreSQL correctamente
           const mappedClasses = response.data.map((cls: any) => ({
             id: cls.id,
-            name: cls.name, // Ya viene formateado como "Matemáticas 10°A"
+            name: cls.name, // Ya viene formateado como "Física 10°A"
             subject: cls.subject,
             classroom: cls.classroom,
             studentCount: cls.studentCount || 0,
-            averageGrade: cls.averageGrade || 8.0, // Valor por defecto
-            nextClass: "Por programar", // Se puede mejorar con horarios
+            averageGrade: cls.averageGrade || 0,
+            nextClass: "Por programar",
             students: cls.students || [],
             academicYear: cls.academicYear,
-            isCurrent: cls.isCurrent,
-            createdAt: cls.createdAt,
             isActive: cls.isActive
           }));
           
@@ -170,19 +168,6 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
           createdAt: response.data.createdAt,
           isActive: response.data.isActive
         };
-        
-        // Si hay horarios, guardarlos
-        if (classData.schedules && classData.schedules.length > 0) {
-          try {
-            // Guardar horarios usando el nuevo endpoint
-            console.log('Guardando horarios:', classData.schedules);
-            await apiClient.classes.createSchedules(mappedClass.id, classData.schedules);
-            console.log('Horarios guardados exitosamente');
-          } catch (scheduleError) {
-            console.error('Error guardando horarios:', scheduleError);
-            // No es un error fatal, la clase se creó pero los horarios pueden no haberse guardado
-          }
-        }
         
         const newClasses = [...classes, mappedClass];
         setClasses(newClasses);

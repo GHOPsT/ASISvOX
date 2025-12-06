@@ -4,6 +4,8 @@ import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Mic, MicOff, Volume2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import type { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "../types/speech";
+import "../types/speech";
 
 interface VoiceGradingProps {
   students: Array<{ id: string; name: string; grade?: number }>;
@@ -18,14 +20,14 @@ export function VoiceGrading({ students, onGradeUpdate }: VoiceGradingProps) {
 
   useEffect(() => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognitionInstance = new SpeechRecognition();
+      const SpeechRecognitionAPI = (window.SpeechRecognition || window.webkitSpeechRecognition) as any;
+      const recognitionInstance = new SpeechRecognitionAPI();
       
       recognitionInstance.continuous = true;
       recognitionInstance.interimResults = true;
       recognitionInstance.lang = 'es-ES';
 
-      recognitionInstance.onresult = (event) => {
+      recognitionInstance.onresult = (event: SpeechRecognitionEvent) => {
         let finalTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           if (event.results[i].isFinal) {
@@ -43,7 +45,7 @@ export function VoiceGrading({ students, onGradeUpdate }: VoiceGradingProps) {
         setIsListening(false);
       };
 
-      recognitionInstance.onerror = (event) => {
+      recognitionInstance.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Error de reconocimiento:', event.error);
         setIsListening(false);
         toast.error('Error en el reconocimiento de voz');

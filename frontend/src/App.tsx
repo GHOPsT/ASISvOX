@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AuthProvider } from "./contexts/AuthContext";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { LoginScreen } from "./components/LoginScreen";
 import { RegisterScreen } from "./components/RegisterScreen";
@@ -9,6 +9,7 @@ import { ClassDetail } from "./components/ClassDetail";
 import { AttendanceView } from "./components/AttendanceView";
 import { ReportsScreen } from "./components/ReportsScreen";
 import { Toaster } from "./components/ui/sonner";
+import { useAuth } from "./contexts/AuthContext";
 
 function AppContent() {
   const { user, isLoading } = useAuth();
@@ -85,7 +86,7 @@ function AppContent() {
         />
       )}
 
-      {currentView === "dashboard" && user?.role === "admin" && (
+      {currentView === "dashboard" && (user?.role === "admin_entity" || user?.role === "admin_general") && (
         <AdminDashboard />
       )}
       

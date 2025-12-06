@@ -223,7 +223,6 @@ async function runTests() {
     assessmentId = assessment?.id || null;
     if (assessmentId) {
       console.log('    [+] Assessment creado con ID: ' + assessmentId);
-      console.log('    [DEBUG] Full assessment response: ' + JSON.stringify(assessment).substring(0, 200));
     }
 
     await test('18. Get assessments', 'GET', `/assessments?class_id=${classId}`, null, tokenTeacher);
@@ -233,10 +232,6 @@ async function runTests() {
       await new Promise(resolve => setTimeout(resolve, 100));
       // Try to fetch assessments list to get the actual ID
       let assessmentsList = await makeRequest('GET', `/assessments?class_id=${classId}`, null, tokenTeacher);
-      console.log('    [DEBUG] GET assessments count: ' + (assessmentsList.data?.data?.length || 0));
-      if (assessmentsList.data?.data?.length > 0) {
-        console.log('    [DEBUG] First assessment in list: ' + JSON.stringify(assessmentsList.data.data[0]).substring(0, 200));
-      }
       if (assessmentsList.data?.data && Array.isArray(assessmentsList.data.data) && assessmentsList.data.data.length > 0) {
         // Find the assessment we just created by matching the ID we captured
         let foundAssessment = assessmentsList.data.data.find(a => a.id === assessmentId);

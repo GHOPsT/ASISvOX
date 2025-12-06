@@ -8,14 +8,14 @@ interface User {
   id: string;
   email: string;
   name: string;
-  role: 'teacher' | 'admin';
+  role: 'admin_general' | 'admin_entity' | 'teacher';
   entityId?: string; // Para admin_entity y teachers
 }
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
-  register: (name: string, email: string, password: string, role: 'teacher' | 'admin') => Promise<boolean>;
+  register: (name: string, email: string, password: string, role: 'admin_general' | 'admin_entity' | 'teacher') => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role as 'teacher' | 'admin', // Asegurar que es teacher o admin
+          role: user.role as 'admin_entity' | 'teacher', // Asegurar que es teacher o admin_entity
           entityId: user.entityId // Incluir entityId si existe
         };
         
@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (name: string, email: string, password: string, role: 'teacher' | 'admin'): Promise<boolean> => {
+  const register = async (name: string, email: string, password: string, role: 'admin_general' | 'admin_entity' | 'teacher'): Promise<boolean> => {
     setIsLoading(true);
     
     try {
@@ -99,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role as 'teacher' | 'admin',
+          role: user.role as 'admin_entity' | 'teacher',
           entityId: user.entityId // Incluir entityId si existe
         };
         

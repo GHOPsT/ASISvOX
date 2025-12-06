@@ -309,7 +309,7 @@ export interface RegisterData {
   name: string;
   email: string;
   password: string;
-  role: 'admin_entity' | 'teacher';
+  role: 'admin_general' | 'admin_entity' | 'teacher';
   entityId?: string;
   subjects?: string[];
 }

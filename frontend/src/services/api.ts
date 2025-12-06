@@ -310,26 +310,6 @@ class ApiClient {
     removeStudentFromClass: async (classId: string, studentId: string): Promise<ApiResponse<void>> => {
       return this.delete<ApiResponse<void>>(`/classes/${classId}/students/${studentId}`);
     },
-
-    // ===============================
-    // SCHEDULE METHODS
-    // ===============================
-
-    createSchedules: async (classId: string, schedules: any[]): Promise<ApiResponse<any>> => {
-      return this.post<ApiResponse<any>>(`/classes/${classId}/schedules`, { schedules });
-    },
-
-    getSchedules: async (classId: string): Promise<ApiResponse<any[]>> => {
-      return this.get<ApiResponse<any[]>>(`/classes/${classId}/schedules`);
-    },
-
-    updateSchedule: async (classId: string, scheduleId: string, data: any): Promise<ApiResponse<any>> => {
-      return this.put<ApiResponse<any>>(`/classes/${classId}/schedules/${scheduleId}`, data);
-    },
-
-    deleteSchedule: async (classId: string, scheduleId: string): Promise<ApiResponse<void>> => {
-      return this.delete<ApiResponse<void>>(`/classes/${classId}/schedules/${scheduleId}`);
-    },
   };
 
   // ===============================
@@ -485,6 +465,28 @@ class ApiClient {
     getGradeStats: async (filters = {}): Promise<ApiResponse<any>> => {
       const params = new URLSearchParams(filters as any).toString();
       return this.get<ApiResponse<any>>(`/statistics/grades?${params}`);
+    },
+  };
+
+  // ===============================
+  // MASTER DATA API
+  // ===============================
+
+  master: any = {
+    getSubjects: async (): Promise<ApiResponse<any[]>> => {
+      return this.get<ApiResponse<any[]>>('/master/subjects');
+    },
+
+    getSections: async (): Promise<ApiResponse<any[]>> => {
+      return this.get<ApiResponse<any[]>>('/master/sections');
+    },
+
+    getAcademicYears: async (): Promise<ApiResponse<any[]>> => {
+      return this.get<ApiResponse<any[]>>('/master/academic-years');
+    },
+
+    getGrades: async (): Promise<ApiResponse<any[]>> => {
+      return this.get<ApiResponse<any[]>>('/master/grades');
     },
   };
 

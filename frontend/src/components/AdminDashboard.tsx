@@ -24,6 +24,8 @@ import { UserManagement } from "./admin/UserManagement";
 import { StatisticsView } from "./admin/StatisticsView";
 import { TeacherAssignmentManager } from "./admin/TeacherAssignmentManager";
 import { EntityManagement } from "./admin/EntityManagement";
+import { apiClient } from "../services/api";
+import { tokenService } from "../services/tokenService";
 
 type AdminView = "overview" | "teachers" | "calendar" | "grades" | "users" | "statistics" | "assignments" | "entities";
 
@@ -32,7 +34,7 @@ export function AdminDashboard() {
   const [currentView, setCurrentView] = useState<AdminView>("overview");
   const [systemStats, setSystemStats] = useState({
     totalTeachers: 0,
-    totalStudents: 450,
+    totalStudents: 0,
     totalClasses: 0,
     activeSubjects: 0
   });
@@ -41,29 +43,30 @@ export function AdminDashboard() {
     updateSystemStats();
   }, [currentView]);
 
-  const updateSystemStats = () => {
-    // Load teachers count
-    const storedUsers = JSON.parse(localStorage.getItem('asisVox_users') || '[]');
-    const teacherCount = storedUsers.filter((u: any) => u.role === 'teacher').length;
-    
-    // Load assignments
-    const assignments = JSON.parse(localStorage.getItem('asisVox_teacher_assignments') || '[]');
-    const totalClasses = assignments.reduce((total: number, a: any) => total + a.classes.length, 0);
-    
-    // Get unique subjects
-    const subjects = new Set<string>();
-    assignments.forEach((a: any) => {
-      a.classes.forEach((c: any) => {
-        subjects.add(c.subject);
-      });
-    });
-    
-    setSystemStats({
-      totalTeachers: teacherCount,
-      totalStudents: 450, // Keep mock for now
-      totalClasses: totalClasses,
-      activeSubjects: subjects.size
-    });
+  const updateSystemStats = async () => {
+    try {
+      // Asegurarse de que el token está configurado
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
+
+      // Cargar estadísticas reales del backend
+      const statsResponse = await apiClient.statistics.getDashboardStats();
+      
+      if (statsResponse.success && statsResponse.data) {
+        const data = statsResponse.data;
+        setSystemStats({
+          totalTeachers: data.teachers || 0,
+          totalStudents: data.students || 0,
+          totalClasses: data.classes || 0,
+          activeSubjects: 0 // El backend no devuelve esto directamente
+        });
+      }
+    } catch (error) {
+      console.error('Error loading system stats:', error);
+      // Keep previous values on error
+    }
   };
 
   const quickStats = [

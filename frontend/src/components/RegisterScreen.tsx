@@ -65,7 +65,7 @@ export function RegisterScreen({ onBack, onLogin }: RegisterScreenProps) {
       formData.name.trim(),
       formData.email,
       formData.password,
-      formData.role
+      (formData.role === 'admin' ? 'admin_entity' : formData.role)
     );
     
     if (!success) {

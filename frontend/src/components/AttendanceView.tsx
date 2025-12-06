@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -14,15 +14,19 @@ import {
   Filter,
   Save,
   Calendar,
-  Clock
+  Clock,
+  Loader
 } from "lucide-react";
 import { toast } from "sonner";
+import { apiClient } from "../services/api";
+import { tokenService } from "../services/tokenService";
+import type { AttendanceSession } from "../../../shared/types";
 
 interface Student {
   id: string;
   name: string;
-  code: string;
-  attendance: boolean;
+  code?: string;
+  attendance?: 'present' | 'absent' | 'late';
 }
 
 interface AttendanceViewProps {
@@ -33,91 +37,200 @@ interface AttendanceViewProps {
 export function AttendanceView({ classId, onBack }: AttendanceViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("voice");
+  const [students, setStudents] = useState<Student[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentSession, setCurrentSession] = useState<AttendanceSession | null>(null);
+  const [classInfo, setClassInfo] = useState<any>(null);
 
-  // Datos mock de la clase
-  const classInfo = {
-    id: classId,
-    name: "Matemáticas 10°A",
-    subject: "Matemáticas",
-    schedule: "Lun, Mié, Vie - 8:00 AM",
-    period: "2024-1",
-    teacher: "Prof. María González"
+  // Cargar datos de la clase y estudiantes
+  useEffect(() => {
+    loadAttendanceData();
+  }, [classId]);
+
+  const loadAttendanceData = async () => {
+    try {
+      setIsLoading(true);
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
+
+      // Obtener estudiantes de la clase
+      const classResponse = await apiClient.classes.getClassById(classId!);
+      if (classResponse?.data?.students && Array.isArray(classResponse.data.students)) {
+        setStudents(classResponse.data.students.map((s: any) => ({
+          id: s.id || s.student_id,
+          name: s.name || s.student_name,
+          code: s.code,
+          attendance: 'present' as const
+        })));
+      }
+
+      // Obtener o crear sesión de asistencia para hoy
+      const today = new Date().toISOString().split('T')[0];
+      const sessionsResponse = await apiClient.attendance.getAttendanceSessions({ classId });
+      const sessions = sessionsResponse?.data || [];
+      let session = sessions.find((s: any) => s.date === today);
+      
+      if (!session) {
+        // Crear nueva sesión
+        const sessionResponse = await apiClient.attendance.createAttendanceSession({
+          classId,
+          teacherId: tokenService.getUserId() || '',
+          date: new Date(today)
+        });
+        session = sessionResponse?.data as AttendanceSession | undefined;
+      }
+      if (session) {
+        setCurrentSession(session);
+      }
+    } catch (error) {
+      console.error('Error loading attendance data:', error);
+      toast.error('Error al cargar datos de asistencia');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const [students, setStudents] = useState<Student[]>([
-    { id: "1", name: "Juan Pérez García", code: "2024001", attendance: true },
-    { id: "2", name: "María González López", code: "2024002", attendance: true },
-    { id: "3", name: "Carlos Rodríguez Martín", code: "2024003", attendance: true },
-    { id: "4", name: "Ana Fernández Silva", code: "2024004", attendance: true },
-    { id: "5", name: "Luis Hernández Ruiz", code: "2024005", attendance: true },
-    { id: "6", name: "Sofia Morales Castro", code: "2024006", attendance: true },
-    { id: "7", name: "Diego Vargas Mendoza", code: "2024007", attendance: true },
-    { id: "8", name: "Isabella Torres Jiménez", code: "2024008", attendance: true },
-    { id: "9", name: "Andrés Ramírez Ortega", code: "2024009", attendance: true },
-    { id: "10", name: "Valentina Cruz Herrera", code: "2024010", attendance: true }
-  ]);
-
   const filteredStudents = students.filter(student =>
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.code.toLowerCase().includes(searchTerm.toLowerCase())
+    student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    student.code?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAttendanceUpdate = (studentId: string, isPresent: boolean) => {
-    setStudents(prev =>
-      prev.map(student =>
-        student.id === studentId ? { ...student, attendance: isPresent } : student
-      )
-    );
+  const handleAttendanceUpdate = async (studentId: string, status: 'present' | 'absent' | 'late') => {
+    try {
+      if (!currentSession) {
+        toast.error('No hay sesión de asistencia activa');
+        return;
+      }
+
+      // Registrar o actualizar asistencia en la BD
+      await apiClient.attendance.recordAttendance({
+        sessionId: currentSession.id,
+        studentId: studentId,
+        status: status,
+        method: 'manual'
+      });
+
+      // Actualizar localmente
+      setStudents(prev =>
+        prev.map(student =>
+          student.id === studentId ? { ...student, attendance: status } : student
+        )
+      );
+
+      toast.success(`Asistencia registrada: ${status}`);
+    } catch (error) {
+      console.error('Error updating attendance:', error);
+      toast.error('Error al registrar asistencia');
+    }
+  };
+
+  // Wrapper para VoiceAttendance que convierte boolean a string
+  const handleVoiceAttendanceUpdate = async (studentId: string, isPresent: boolean) => {
+    const status = isPresent ? 'present' : 'absent';
+    await handleAttendanceUpdate(studentId, status);
   };
 
   const handleManualAttendance = (studentId: string) => {
     const student = students.find(s => s.id === studentId);
     if (student) {
-      // Solo permite cambiar entre Presente (true) y Ausente (false)
-      const newAttendance = student.attendance === true ? false : true;
-      handleAttendanceUpdate(studentId, newAttendance);
+      const currentStatus = student.attendance || 'present';
+      const nextStatus: 'present' | 'absent' | 'late' = 
+        currentStatus === 'present' ? 'absent' : 
+        currentStatus === 'absent' ? 'late' : 'present';
+      handleAttendanceUpdate(studentId, nextStatus);
     }
   };
 
-  const handleSaveAttendance = () => {
-    // Todos los estudiantes ya tienen asistencia marcada por defecto
-    const presentStudents = students.filter(s => s.attendance === true);
-    const absentStudents = students.filter(s => s.attendance === false);
-    
-    // Simular guardado
-    toast.success(`Asistencia guardada: ${presentStudents.length} presentes, ${absentStudents.length} ausentes`);
+  const handleSaveAttendance = async () => {
+    try {
+      if (!currentSession) {
+        toast.error('No hay sesión de asistencia activa');
+        return;
+      }
+
+      const presentCount = students.filter(s => s.attendance === 'present').length;
+      const absentCount = students.filter(s => s.attendance === 'absent').length;
+      const lateCount = students.filter(s => s.attendance === 'late').length;
+      
+      toast.success(`Asistencia guardada: ${presentCount} presentes, ${absentCount} ausentes, ${lateCount} retrasados`);
+    } catch (error) {
+      console.error('Error saving attendance:', error);
+      toast.error('Error al guardar asistencia');
+    }
   };
 
   const handleExportAttendance = () => {
-    // Simular exportación
-    toast.success("Reporte de asistencia exportado");
+    try {
+      const csv = generateAttendanceCSV();
+      downloadCSV(csv, `asistencia_${classId}_${new Date().toISOString().split('T')[0]}.csv`);
+      toast.success("Reporte de asistencia exportado");
+    } catch (error) {
+      console.error('Error exporting attendance:', error);
+      toast.error('Error al exportar reporte');
+    }
+  };
+
+  const generateAttendanceCSV = () => {
+    let csv = 'Estudiante,Código,Estado,Fecha\n';
+    const today = new Date().toISOString().split('T')[0];
+    students.forEach(student => {
+      csv += `${student.name},${student.code},${student.attendance},${today}\n`;
+    });
+    return csv;
+  };
+
+  const downloadCSV = (csv: string, filename: string) => {
+    const element = document.createElement('a');
+    element.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv));
+    element.setAttribute('download', filename);
+    element.style.display = 'none';
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
   };
 
   const getAttendanceStats = () => {
-    const presentCount = students.filter(s => s.attendance === true).length;
-    const absentCount = students.filter(s => s.attendance === false).length;
+    const presentCount = students.filter(s => s.attendance === 'present').length;
+    const absentCount = students.filter(s => s.attendance === 'absent').length;
+    const lateCount = students.filter(s => s.attendance === 'late').length;
     const attendanceRate = students.length > 0 ? ((presentCount / students.length) * 100).toFixed(0) : 0;
 
     return {
       totalStudents: students.length,
       presentCount,
       absentCount,
+      lateCount,
       attendanceRate
     };
   };
 
   const stats = getAttendanceStats();
 
-  const getAttendanceBadgeVariant = (attendance: boolean) => {
-    return attendance === true ? "default" : "destructive";
+  const getAttendanceBadgeVariant = (attendance?: string) => {
+    if (attendance === 'present') return 'default';
+    if (attendance === 'late') return 'secondary';
+    return 'destructive';
   };
 
-  const getAttendanceLabel = (attendance: boolean) => {
-    return attendance === true ? "Presente" : "Ausente";
+  const getAttendanceLabel = (attendance?: string) => {
+    if (attendance === 'present') return 'Presente';
+    if (attendance === 'late') return 'Retrasado';
+    return 'Ausente';
   };
 
   return (
     <div className="h-screen flex flex-col">
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <p>Cargando datos de asistencia...</p>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Header */}
       <div className="p-4 border-b bg-background">
         <div className="flex items-center gap-3 mb-4">
@@ -125,7 +238,7 @@ export function AttendanceView({ classId, onBack }: AttendanceViewProps) {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1">
-            <h1>Asistencia - {classInfo.name}</h1>
+            <h1>Asistencia - {classInfo?.name || 'Clase'}</h1>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Calendar className="h-4 w-4" />
               <span>{new Date().toLocaleDateString('es-ES', { 
@@ -176,8 +289,8 @@ export function AttendanceView({ classId, onBack }: AttendanceViewProps) {
           <div className="flex-1 overflow-hidden p-4">
             <TabsContent value="voice" className="h-full space-y-4 mt-0">
               <VoiceAttendance
-                students={students}
-                onAttendanceUpdate={handleAttendanceUpdate}
+                students={students.map(s => ({ ...s, attendance: s.attendance === 'present' ? true : false }))}
+                onAttendanceUpdate={handleVoiceAttendanceUpdate}
               />
               
               {/* Recent Updates */}
@@ -185,7 +298,7 @@ export function AttendanceView({ classId, onBack }: AttendanceViewProps) {
                 <h3 className="mb-3">Actualizaciones recientes</h3>
                 <div className="space-y-2 max-h-32 overflow-y-auto">
                   {students
-                    .filter(s => s.attendance === false) // Solo mostrar estudiantes ausentes ya que son las "actualizaciones"
+                    .filter(s => s.attendance !== 'present') // Solo mostrar estudiantes ausentes o tardíos
                     .slice(-5)
                     .map((student) => (
                       <div key={student.id} className="flex items-center justify-between p-2 bg-muted rounded-lg">
@@ -195,7 +308,7 @@ export function AttendanceView({ classId, onBack }: AttendanceViewProps) {
                         </Badge>
                       </div>
                     ))}
-                  {students.filter(s => s.attendance === false).length === 0 && (
+                  {students.filter(s => s.attendance !== 'present').length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">
                       Todos los estudiantes están presentes
                     </p>
@@ -266,13 +379,13 @@ export function AttendanceView({ classId, onBack }: AttendanceViewProps) {
                   <h4 className="text-sm font-medium text-green-800 mb-2">Presentes ({stats.presentCount})</h4>
                   <div className="space-y-1">
                     {students
-                      .filter(s => s.attendance === true)
+                      .filter(s => s.attendance === 'present')
                       .slice(0, 4)
                       .map(student => (
                         <p key={student.id} className="text-xs text-green-700">{student.name}</p>
                       ))}
-                    {students.filter(s => s.attendance === true).length > 4 && (
-                      <p className="text-xs text-green-600">+{students.filter(s => s.attendance === true).length - 4} más</p>
+                    {students.filter(s => s.attendance === 'present').length > 4 && (
+                      <p className="text-xs text-green-600">+{students.filter(s => s.attendance === 'present').length - 4} más</p>
                     )}
                   </div>
                 </Card>
@@ -280,16 +393,16 @@ export function AttendanceView({ classId, onBack }: AttendanceViewProps) {
                 <Card className="p-3 bg-red-50 border-red-200">
                   <h4 className="text-sm font-medium text-red-800 mb-2">Ausentes ({stats.absentCount})</h4>
                   <div className="space-y-1">
-                    {students.filter(s => s.attendance === false).length > 0 ? (
+                    {students.filter(s => s.attendance !== 'present').length > 0 ? (
                       <>
                         {students
-                          .filter(s => s.attendance === false)
+                          .filter(s => s.attendance !== 'present')
                           .slice(0, 4)
                           .map(student => (
                             <p key={student.id} className="text-xs text-red-700">{student.name}</p>
                           ))}
-                        {students.filter(s => s.attendance === false).length > 4 && (
-                          <p className="text-xs text-red-600">+{students.filter(s => s.attendance === false).length - 4} más</p>
+                        {students.filter(s => s.attendance !== 'present').length > 4 && (
+                          <p className="text-xs text-red-600">+{students.filter(s => s.attendance !== 'present').length - 4} más</p>
                         )}
                       </>
                     ) : (
@@ -323,6 +436,8 @@ export function AttendanceView({ classId, onBack }: AttendanceViewProps) {
           </div>
         </Tabs>
       </div>
+        </>
+      )}
     </div>
   );
 }

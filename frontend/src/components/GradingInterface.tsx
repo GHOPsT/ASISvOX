@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -13,59 +13,153 @@ import {
   RotateCcw,
   TrendingUp,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Loader
 } from "lucide-react";
 import { toast } from "sonner";
+import { apiClient } from "../services/api";
+import { tokenService } from "../services/tokenService";
 
 interface Assessment {
   id: string;
   name: string;
-  type: string;
-  weight: number;
-  maxScore: number;
-  icon: any;
-  color: string;
+  type?: string;
+  weight?: number;
+  maxScore?: number;
+  max_score?: number;
+  icon?: any;
+  color?: string;
 }
 
 interface StudentGrade {
   studentId: string;
+  student_id?: string;
   assessmentId: string;
+  assessment_id?: string;
   score: number;
+  id?: string;
 }
 
 interface Student {
   id: string;
   name: string;
-  code: string;
+  code?: string;
 }
 
 interface GradingInterfaceProps {
-  students: Student[];
-  assessments: Assessment[];
-  onGradesChange: (grades: StudentGrade[]) => void;
+  classId?: string;
+  students?: Student[];
+  assessments?: Assessment[];
+  onGradesChange?: (grades: StudentGrade[]) => void;
 }
 
-export function GradingInterface({ students, assessments, onGradesChange }: GradingInterfaceProps) {
+export function GradingInterface({ classId, students: initialStudents = [], assessments: initialAssessments = [], onGradesChange }: GradingInterfaceProps) {
   const [grades, setGrades] = useState<StudentGrade[]>([]);
-  const [selectedAssessment, setSelectedAssessment] = useState<string>(assessments[0]?.id || "");
+  const [students, setStudents] = useState<Student[]>(initialStudents);
+  const [assessments, setAssessments] = useState<Assessment[]>(initialAssessments);
+  const [selectedAssessment, setSelectedAssessment] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const updateGrade = (studentId: string, assessmentId: string, score: number) => {
-    setGrades(prev => {
-      const existing = prev.find(g => g.studentId === studentId && g.assessmentId === assessmentId);
-      if (existing) {
-        return prev.map(g =>
-          g.studentId === studentId && g.assessmentId === assessmentId
-            ? { ...g, score }
-            : g
-        );
-      } else {
-        return [...prev, { studentId, assessmentId, score }];
+  useEffect(() => {
+    if (classId) {
+      loadGradingData();
+    } else {
+      setIsLoading(false);
+    }
+  }, [classId]);
+
+  const loadGradingData = async () => {
+    try {
+      setIsLoading(true);
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
       }
-    });
+
+      // Cargar estudiantes de la clase
+      const classResponse = await apiClient.classes.getClassById(classId!);
+      if (classResponse?.data?.students) {
+        setStudents(classResponse.data.students.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          code: s.code
+        })));
+      }
+
+      // Cargar evaluaciones de la clase
+      const assessmentsResponse = await apiClient.assessments.getAssessments({ classId });
+      const assessmentsData = assessmentsResponse?.data || [];
+      setAssessments(assessmentsData);
+      if (assessmentsData && assessmentsData.length > 0) {
+        setSelectedAssessment(assessmentsData[0].id);
+      }
+
+      // Cargar calificaciones
+      const gradesResponse = await apiClient.grading.getGrades({ classId });
+      const gradesData = gradesResponse?.data || [];
+      setGrades(gradesData.map((g: any) => ({
+        studentId: g.student_id || g.studentId,
+        assessmentId: g.assessment_id || g.assessmentId,
+        score: g.score,
+        id: g.id
+      })));
+    } catch (error) {
+      console.error('Error loading grading data:', error);
+      toast.error('Error al cargar datos de calificación');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateGrade = async (studentId: string, assessmentId: string, score: number) => {
+    try {
+      const existing = grades.find(g => 
+        g.studentId === studentId && g.assessmentId === assessmentId
+      );
+
+      if (existing?.id) {
+        // Actualizar calificación existente - usar updateGrade de grading API
+        await apiClient.grading.updateGrade(existing.id, { score });
+      } else {
+        // Crear nueva calificación - usar recordGrade de grading API
+        await apiClient.grading.recordGrade({
+          studentId: studentId,
+          assessmentId: assessmentId,
+          score: score,
+          method: 'manual'
+        });
+      }
+
+      // Actualizar estado local
+      setGrades(prev => {
+        const existingIndex = prev.findIndex(g => 
+          g.studentId === studentId && g.assessmentId === assessmentId
+        );
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = { ...updated[existingIndex], score };
+          return updated;
+        } else {
+          return [...prev, { studentId, assessmentId, score }];
+        }
+      });
+
+      if (onGradesChange) {
+        onGradesChange(grades);
+      }
+    } catch (error) {
+      console.error('Error updating grade:', error);
+      toast.error('Error al guardar calificación');
+    }
   };
 
   const getStudentGrade = (studentId: string, assessmentId: string): number | undefined => {
-    return grades.find(g => g.studentId === studentId && g.assessmentId === assessmentId)?.score;
+    const grade = grades.find(g => 
+      (g.studentId === studentId || g.student_id === studentId) && 
+      (g.assessmentId === assessmentId || g.assessment_id === assessmentId)
+    );
+    return grade?.score;
   };
 
   const calculateFinalGrade = (studentId: string): number => {
@@ -74,7 +168,7 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
 
     assessments.forEach(assessment => {
       const grade = getStudentGrade(studentId, assessment.id);
-      if (grade !== undefined) {
+      if (grade !== undefined && assessment.maxScore && assessment.weight) {
         const normalizedScore = (grade / assessment.maxScore) * 20; // Normalizar a escala de 20
         totalWeightedScore += normalizedScore * (assessment.weight / 100);
         totalWeight += assessment.weight / 100;
@@ -101,9 +195,17 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
     return (graded / students.length) * 100;
   };
 
-  const saveGrades = () => {
-    onGradesChange(grades);
-    toast.success("Calificaciones guardadas exitosamente");
+  const saveGrades = async () => {
+    try {
+      setIsSaving(true);
+      // Las calificaciones ya se guardan al hacer updateGrade
+      toast.success("Calificaciones guardadas exitosamente");
+    } catch (error) {
+      console.error('Error saving grades:', error);
+      toast.error('Error al guardar calificaciones');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const clearGrades = (assessmentId: string) => {
@@ -128,9 +230,18 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
 
   return (
     <div className="h-full flex flex-col space-y-4">
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <p>Cargando datos de calificación...</p>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Assessment Tabs */}
       <Tabs value={selectedAssessment} onValueChange={setSelectedAssessment} className="h-full flex flex-col">
-        <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${assessments.length}, 1fr)` }}>
+        <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${assessments.length || 1}, 1fr)` }}>
           {assessments.map((assessment) => {
             const Icon = assessment.icon;
             const completion = getCompletionPercentage(assessment.id);
@@ -199,7 +310,7 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
                 {students.map((student) => {
                   const currentGrade = getStudentGrade(student.id, assessment.id);
                   const finalGrade = calculateFinalGrade(student.id);
-                  const status = currentGrade ? getGradeStatus(currentGrade, assessment.maxScore) : null;
+                  const status = currentGrade && assessment.maxScore ? getGradeStatus(currentGrade, assessment.maxScore) : null;
                   
                   return (
                     <Card key={student.id} className="p-3">
@@ -236,13 +347,14 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
                               <Input
                                 type="number"
                                 min="0"
-                                max={assessment.maxScore}
+                                max={assessment.maxScore || 100}
                                 step="0.1"
                                 placeholder="0.0"
                                 value={currentGrade || ""}
                                 onChange={(e) => {
                                   const score = parseFloat(e.target.value);
-                                  if (!isNaN(score) && score >= 0 && score <= assessment.maxScore) {
+                                  const maxScore = assessment.maxScore || 100;
+                                  if (!isNaN(score) && score >= 0 && score <= maxScore) {
                                     updateGrade(student.id, assessment.id, score);
                                   } else if (e.target.value === "") {
                                     // Clear grade if input is empty
@@ -252,7 +364,7 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
                                 className="w-20 h-8 text-sm"
                               />
                               <span className="text-xs text-muted-foreground">
-                                / {assessment.maxScore}
+                                / {assessment.maxScore || 100}
                               </span>
                             </div>
                           </div>
@@ -260,7 +372,7 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
                           {currentGrade !== undefined && (
                             <div className="text-center">
                               <p className="text-xs font-medium">
-                                {((currentGrade / assessment.maxScore) * 100).toFixed(1)}%
+                                {((currentGrade / (assessment.maxScore || 100)) * 100).toFixed(1)}%
                               </p>
                             </div>
                           )}
@@ -269,7 +381,7 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
                         {/* Progress Bar */}
                         {currentGrade !== undefined && (
                           <Progress 
-                            value={(currentGrade / assessment.maxScore) * 100} 
+                            value={(currentGrade / (assessment.maxScore || 100)) * 100} 
                             className="h-1.5"
                           />
                         )}
@@ -296,7 +408,7 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
                         .length > 0
                         ? (grades
                             .filter(g => g.assessmentId === assessment.id)
-                            .reduce((sum, g) => sum + (g.score / assessment.maxScore) * 100, 0) /
+                            .reduce((sum, g) => sum + (g.score / (assessment.maxScore || 100)) * 100, 0) /
                           grades.filter(g => g.assessmentId === assessment.id).length
                         ).toFixed(1)
                         : 0}%
@@ -305,7 +417,7 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
                   </div>
                   <div>
                     <p className="text-sm font-semibold">
-                      {grades.filter(g => g.assessmentId === assessment.id && (g.score / assessment.maxScore) >= 0.6).length}
+                      {grades.filter(g => g.assessmentId === assessment.id && (g.score / (assessment.maxScore || 100)) >= 0.6).length}
                     </p>
                     <p className="text-xs text-muted-foreground">Aprobados</p>
                   </div>
@@ -316,6 +428,8 @@ export function GradingInterface({ students, assessments, onGradesChange }: Grad
           })}
         </div>
       </Tabs>
+        </>
+      )}
     </div>
   );
 }

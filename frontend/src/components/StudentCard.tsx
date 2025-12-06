@@ -1,4 +1,4 @@
-import { Card } from "../../../components/ui/card";
+import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { Avatar, AvatarFallback } from "./ui/avatar";

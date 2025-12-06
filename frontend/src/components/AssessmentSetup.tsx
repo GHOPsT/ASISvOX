@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -15,9 +15,12 @@ import {
   FileText, 
   PenTool,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Loader
 } from "lucide-react";
 import { toast } from "sonner";
+import { apiClient } from "../services/api";
+import { tokenService } from "../services/tokenService";
 
 interface Assessment {
   id: string;
@@ -38,6 +41,46 @@ interface AssessmentSetupProps {
 export function AssessmentSetup({ classId, onAssessmentsChange, selectedDate }: AssessmentSetupProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [customAssessmentName, setCustomAssessmentName] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedAssessments, setSelectedAssessments] = useState<Assessment[]>([]);
+
+  // Cargar evaluaciones del API cuando el componente se monta
+  useEffect(() => {
+    loadAssessments();
+  }, [classId]);
+
+  const loadAssessments = async () => {
+    try {
+      setIsLoading(true);
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
+
+      const response = await apiClient.assessments.getAssessments({ classId });
+      const assessmentsData = response?.data || [];
+      
+      const mappedAssessments = assessmentsData.map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        weight: a.weight || 100,
+        maxScore: a.maxScore || 20,
+        icon: FileText,
+        color: "bg-blue-100 text-blue-700"
+      }));
+      
+      setSelectedAssessments(mappedAssessments);
+      if (onAssessmentsChange) {
+        onAssessmentsChange(mappedAssessments);
+      }
+    } catch (error) {
+      console.error('Error loading assessments:', error);
+      toast.error('Error al cargar evaluaciones');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Tipos de evaluación predefinidos
   const assessmentTypes = [
@@ -49,8 +92,6 @@ export function AssessmentSetup({ classId, onAssessmentsChange, selectedDate }: 
     { id: "trabajo_grupal", name: "Trabajo Grupal", icon: Settings, color: "bg-indigo-100 text-indigo-700" }
   ];
 
-  const [selectedAssessments, setSelectedAssessments] = useState<Assessment[]>([]);
-
   const getCurrentDateString = () => {
     return selectedDate || new Date().toLocaleDateString('es-ES', { 
       weekday: 'long', 
@@ -59,56 +100,131 @@ export function AssessmentSetup({ classId, onAssessmentsChange, selectedDate }: 
     });
   };
 
-  const addAssessment = (typeId: string) => {
+  const getValidAssessmentType = (typeId: string): 'exam' | 'quiz' | 'homework' | 'project' | 'participation' => {
+    const typeMap: Record<string, 'exam' | 'quiz' | 'homework' | 'project' | 'participation'> = {
+      'examen': 'exam',
+      'practica': 'homework',
+      'test_entrada': 'quiz',
+      'practica_oral': 'quiz',
+      'participacion': 'participation',
+      'trabajo_grupal': 'project'
+    };
+    return typeMap[typeId] || 'homework';
+  };
+
+  const addAssessment = async (typeId: string) => {
     const type = assessmentTypes.find(t => t.id === typeId);
     if (!type) return;
 
-    const newAssessment: Assessment = {
-      id: `${typeId}_${Date.now()}`,
-      name: type.name,
-      type: typeId,
-      weight: 100,
-      maxScore: 20,
-      icon: type.icon,
-      color: type.color
-    };
+    try {
+      const validType = getValidAssessmentType(typeId);
+      const newAssessment = {
+        name: type.name,
+        type: validType,
+        weight: 100,
+        maxScore: 20,
+        classId: classId,
+        date: new Date()
+      };
 
-    setSelectedAssessments(prev => [...prev, newAssessment]);
-    toast.success(`${type.name} agregada`);
+      const response = await apiClient.assessments.createAssessment(newAssessment);
+      const createdAssessment = response?.data;
+      
+      if (createdAssessment) {
+        const assessment: Assessment = {
+          id: createdAssessment.id,
+          name: createdAssessment.name,
+          type: createdAssessment.type,
+          weight: createdAssessment.weight || 100,
+          maxScore: createdAssessment.maxScore || 20,
+          icon: type.icon,
+          color: type.color
+        };
+        
+        setSelectedAssessments(prev => [...prev, assessment]);
+        if (onAssessmentsChange) {
+          onAssessmentsChange([...selectedAssessments, assessment]);
+        }
+        toast.success(`${type.name} agregada`);
+      }
+    } catch (error) {
+      console.error('Error creating assessment:', error);
+      toast.error('Error al crear evaluación');
+    }
   };
 
-  const addCustomAssessment = () => {
+  const addCustomAssessment = async () => {
     if (!customAssessmentName.trim()) {
       toast.error("Ingresa un nombre para la evaluación");
       return;
     }
 
-    const newAssessment: Assessment = {
-      id: `custom_${Date.now()}`,
-      name: customAssessmentName,
-      type: "custom",
-      weight: 100,
-      maxScore: 20,
-      icon: FileText,
-      color: "bg-gray-100 text-gray-700"
-    };
+    try {
+      const newAssessment = {
+        name: customAssessmentName,
+        type: 'homework' as const,
+        weight: 100,
+        maxScore: 20,
+        classId: classId,
+        date: new Date()
+      };
 
-    setSelectedAssessments(prev => [...prev, newAssessment]);
-    setCustomAssessmentName("");
-    toast.success(`${customAssessmentName} agregada`);
+      const response = await apiClient.assessments.createAssessment(newAssessment);
+      const createdAssessment = response?.data;
+      
+      if (createdAssessment) {
+        const assessment: Assessment = {
+          id: createdAssessment.id,
+          name: createdAssessment.name,
+          type: createdAssessment.type,
+          weight: createdAssessment.weight || 100,
+          maxScore: createdAssessment.maxScore || 20,
+          icon: FileText,
+          color: "bg-gray-100 text-gray-700"
+        };
+        
+        setSelectedAssessments(prev => [...prev, assessment]);
+        if (onAssessmentsChange) {
+          onAssessmentsChange([...selectedAssessments, assessment]);
+        }
+        setCustomAssessmentName("");
+        toast.success(`${customAssessmentName} agregada`);
+      }
+    } catch (error) {
+      console.error('Error creating custom assessment:', error);
+      toast.error('Error al crear evaluación personalizada');
+    }
   };
 
-  const removeAssessment = (id: string) => {
-    setSelectedAssessments(prev => prev.filter(a => a.id !== id));
-    toast.success("Evaluación eliminada");
+  const removeAssessment = async (id: string) => {
+    try {
+      await apiClient.assessments.deleteAssessment(id);
+      setSelectedAssessments(prev => prev.filter(a => a.id !== id));
+      if (onAssessmentsChange) {
+        onAssessmentsChange(selectedAssessments.filter(a => a.id !== id));
+      }
+      toast.success("Evaluación eliminada");
+    } catch (error) {
+      console.error('Error deleting assessment:', error);
+      toast.error('Error al eliminar evaluación');
+    }
   };
 
-  const updateAssessment = (id: string, field: keyof Assessment, value: any) => {
-    setSelectedAssessments(prev =>
-      prev.map(assessment =>
-        assessment.id === id ? { ...assessment, [field]: value } : assessment
-      )
-    );
+  const updateAssessment = async (id: string, field: keyof Assessment, value: any) => {
+    try {
+      // Actualizar en el API
+      await apiClient.assessments.updateAssessment(id, { [field]: value });
+      
+      // Actualizar en estado local
+      setSelectedAssessments(prev =>
+        prev.map(assessment =>
+          assessment.id === id ? { ...assessment, [field]: value } : assessment
+        )
+      );
+    } catch (error) {
+      console.error('Error updating assessment:', error);
+      toast.error('Error al actualizar evaluación');
+    }
   };
 
   const saveConfiguration = () => {
