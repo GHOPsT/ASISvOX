@@ -28,27 +28,12 @@ exports.getSubjects = (0, errorHandler_1.asyncHandler)(async (req, res) => {
 // ===============================
 // GET - Obtener todas las secciones
 exports.getSections = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { grade_id, academic_year_id } = req.query;
-    let whereClause = 'WHERE 1=1';
-    const params = [];
-    let paramIndex = 1;
-    if (grade_id) {
-        whereClause += ` AND grade_id = $${paramIndex}`;
-        params.push(grade_id);
-        paramIndex++;
-    }
-    if (academic_year_id) {
-        whereClause += ` AND academic_year_id = $${paramIndex}`;
-        params.push(academic_year_id);
-        paramIndex++;
-    }
-    const sectionsResult = await (0, connection_1.query)(`SELECT sec.id, sec.name, sec.grade_id, sec.academic_year_id,
-            g.name as grade_name, ay.name as academic_year_name
+    // Ya no aceptamos grade_id ni academic_year_id como filtros
+    // Las secciones son globales: A, B, C, Sin Sección
+    const sectionsResult = await (0, connection_1.query)(`SELECT sec.id, sec.name, sec.max_students, sec.is_active
      FROM sections sec
-     JOIN grades g ON sec.grade_id = g.id
-     JOIN academic_years ay ON sec.academic_year_id = ay.id
-     ${whereClause}
-     ORDER BY g.level DESC, sec.name ASC`, params);
+     WHERE sec.is_active = true
+     ORDER BY sec.name ASC`);
     const response = {
         success: true,
         data: sectionsResult.rows,

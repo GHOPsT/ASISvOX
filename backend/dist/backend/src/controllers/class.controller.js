@@ -12,7 +12,7 @@ const connection_1 = require("../config/connection");
 // Buscar clase con detalles completos
 const findClassWithDetails = async (classId) => {
     const result = await (0, connection_1.query)(`SELECT 
-        c.id, c.entity_id, c.section_id, c.subject_id, c.teacher_id, 
+        c.id, c.entity_id, c.grade_id, c.section_id, c.subject_id, c.teacher_id, 
         c.academic_year_id, c.classroom, c.weeks_duration, c.is_active, c.created_at, c.updated_at,
         sub.name as subject_name, sub.code as subject_code,
         sec.name as section_name, g.name as grade_name,
@@ -23,16 +23,17 @@ const findClassWithDetails = async (classId) => {
         0 as average_grade
      FROM classes c
      JOIN subjects sub ON c.subject_id = sub.id
+     JOIN grades g ON c.grade_id = g.id
      JOIN sections sec ON c.section_id = sec.id
-     JOIN grades g ON sec.grade_id = g.id
      JOIN academic_years ay ON c.academic_year_id = ay.id
      JOIN users u ON c.teacher_id = u.id
      JOIN entities e ON c.entity_id = e.id
-     LEFT JOIN enrollments en ON sec.id = en.section_id 
+     LEFT JOIN enrollments en ON c.grade_id = en.grade_id 
+       AND c.section_id = en.section_id
        AND en.academic_year_id = c.academic_year_id 
        AND en.status = 'active'
      WHERE c.id = $1
-     GROUP BY c.id, sub.id, sec.id, g.id, ay.id, u.id, e.id`, [classId]);
+     GROUP BY c.id, sub.id, g.id, sec.id, ay.id, u.id, e.id`, [classId]);
     return result.rows[0];
 };
 // Convertir clase BD a formato respuesta
@@ -116,7 +117,7 @@ exports.getClasses = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     // Query principal con paginación
     const classesQuery = `
     SELECT 
-      c.id, c.entity_id, c.section_id, c.subject_id, c.teacher_id, 
+      c.id, c.entity_id, c.grade_id, c.section_id, c.subject_id, c.teacher_id, 
       c.academic_year_id, c.classroom, c.weeks_duration, c.is_active, c.created_at, c.updated_at,
       sub.name as subject_name, sub.code as subject_code,
       sec.name as section_name, g.name as grade_name,
@@ -134,17 +135,18 @@ exports.getClasses = (0, errorHandler_1.asyncHandler)(async (req, res) => {
       ) ORDER BY sch.day_of_week) FILTER (WHERE sch.id IS NOT NULL) as schedules
     FROM classes c
     JOIN subjects sub ON c.subject_id = sub.id
+    JOIN grades g ON c.grade_id = g.id
     JOIN sections sec ON c.section_id = sec.id
-    JOIN grades g ON sec.grade_id = g.id
     JOIN academic_years ay ON c.academic_year_id = ay.id
     JOIN users u ON c.teacher_id = u.id
     JOIN entities e ON c.entity_id = e.id
-    LEFT JOIN enrollments en ON sec.id = en.section_id 
+    LEFT JOIN enrollments en ON c.grade_id = en.grade_id 
+      AND c.section_id = en.section_id
       AND en.academic_year_id = c.academic_year_id 
       AND en.status = 'active'
     LEFT JOIN schedules sch ON c.id = sch.class_id
     ${whereClause}
-    GROUP BY c.id, sub.id, sec.id, g.id, ay.id, u.id, e.id
+    GROUP BY c.id, sub.id, g.id, sec.id, ay.id, u.id, e.id
     ORDER BY c.created_at DESC
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
   `;
@@ -191,10 +193,10 @@ exports.getClassById = (0, errorHandler_1.asyncHandler)(async (req, res) => {
 });
 // POST - Crear clase (⭐ AUTO-ASIGNACIÓN PARA TEACHERS)
 exports.createClass = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { subject_id, section_id, academic_year_id, classroom, weeks_duration } = req.body;
+    const { grade_id, subject_id, section_id, academic_year_id, classroom, weeks_duration } = req.body;
     // Validaciones básicas
-    if (!subject_id || !section_id || !academic_year_id) {
-        throw (0, errorHandler_1.createError)('subject_id, section_id y academic_year_id son requeridos', 400);
+    if (!grade_id || !subject_id || !section_id || !academic_year_id) {
+        throw (0, errorHandler_1.createError)('grade_id, subject_id, section_id y academic_year_id son requeridos', 400);
     }
     // Validar weeks_duration si se proporciona
     const weeksValue = weeks_duration ? parseInt(weeks_duration, 10) : 52;
@@ -210,14 +212,18 @@ exports.createClass = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     if (!req.user.entityId) {
         throw (0, errorHandler_1.createError)('Profesor debe estar asociado a una entidad o ser independiente con entidad asignada', 400);
     }
-    // Validar que la sección existe y pertenece a la entidad
-    const sectionResult = await (0, connection_1.query)(`SELECT sec.id, sec.grade_id 
-     FROM sections sec
-     JOIN grades g ON sec.grade_id = g.id
-     WHERE sec.id = $1 AND sec.academic_year_id = $2`, [section_id, academic_year_id]);
+    // Validar que el grado existe
+    const gradeResult = await (0, connection_1.query)('SELECT id, name, level FROM grades WHERE id = $1 AND is_active = true', [grade_id]);
+    if (gradeResult.rows.length === 0) {
+        throw (0, errorHandler_1.createError)('Grado no encontrado o no está activo', 404);
+    }
+    const gradeName = gradeResult.rows[0].name;
+    // Validar que la sección existe (es una de las secciones globales)
+    const sectionResult = await (0, connection_1.query)('SELECT id, name FROM sections WHERE id = $1', [section_id]);
     if (sectionResult.rows.length === 0) {
         throw (0, errorHandler_1.createError)('Sección no encontrada', 404);
     }
+    const sectionName = sectionResult.rows[0].name;
     // Validar que la materia existe
     const subjectResult = await (0, connection_1.query)('SELECT id FROM subjects WHERE id = $1 AND is_active = true', [subject_id]);
     if (subjectResult.rows.length === 0) {
@@ -228,13 +234,30 @@ exports.createClass = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     if (yearResult.rows.length === 0) {
         throw (0, errorHandler_1.createError)('Año académico no encontrado', 404);
     }
+    // ⭐ VALIDACIÓN: Verificar que todas las clases del MISMO GRADO + SECCIÓN duren lo mismo
+    const existingClassesResult = await (0, connection_1.query)(`SELECT DISTINCT weeks_duration
+     FROM classes c
+     WHERE c.grade_id = $1 
+       AND c.section_id = $2
+       AND c.academic_year_id = $3
+       AND c.is_active = true`, [grade_id, section_id, academic_year_id]);
+    if (existingClassesResult.rows.length > 0) {
+        const existingDuration = existingClassesResult.rows[0].weeks_duration;
+        if (existingDuration !== weeksValue) {
+            throw (0, errorHandler_1.createError)(`Las clases de la sección ${gradeName}°${sectionName} deben durar ${existingDuration} semanas`, 400);
+        }
+    }
     // REGLA: Crear clase con auto-asignación
     // teacher_id = req.user.id (el profesor que crea)
     // entity_id = req.user.entityId (la entidad del profesor)
+    // grade_id = del request (ahora es requerido)
+    console.log('DEBUG - req.user:', req.user);
+    console.log('DEBUG - teacher_id to use:', req.user?.id);
+    console.log('DEBUG - entity_id to use:', req.user?.entityId);
     try {
-        const createResult = await (0, connection_1.query)(`INSERT INTO classes (section_id, subject_id, teacher_id, academic_year_id, entity_id, classroom, weeks_duration, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
-       RETURNING id, entity_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active, created_at, updated_at`, [section_id, subject_id, req.user.id, academic_year_id, req.user.entityId, classroom || null, weeksValue]);
+        const createResult = await (0, connection_1.query)(`INSERT INTO classes (grade_id, section_id, subject_id, teacher_id, academic_year_id, entity_id, classroom, weeks_duration, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+       RETURNING id, entity_id, grade_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active, created_at, updated_at`, [grade_id, section_id, subject_id, req.user.id, academic_year_id, req.user.entityId, classroom || null, weeksValue]);
         if (createResult.rows.length === 0) {
             throw (0, errorHandler_1.createError)('Error al crear la clase', 500);
         }
@@ -357,12 +380,13 @@ exports.getClassStudents = (0, errorHandler_1.asyncHandler)(async (req, res) => 
     const studentsResult = await (0, connection_1.query)(`SELECT DISTINCT s.id, s.first_name, s.last_name, s.identification_number, s.email, s.phone
      FROM students s
      JOIN enrollments e ON s.id = e.student_id
-     WHERE e.section_id = $1 AND e.academic_year_id = $2 AND e.status = 'active'
-     ORDER BY s.last_name, s.first_name`, [dbClass.section_id, dbClass.academic_year_id]);
+     WHERE e.grade_id = $1 AND e.section_id = $2 AND e.academic_year_id = $3 AND e.status = 'active'
+     ORDER BY s.last_name, s.first_name`, [dbClass.grade_id, dbClass.section_id, dbClass.academic_year_id]);
     const students = studentsResult.rows.map(row => ({
         id: row.id,
-        name: `${row.first_name} ${row.last_name}`,
-        identificationNumber: row.identification_number,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        identification_number: row.identification_number,
         email: row.email,
         phone: row.phone,
     }));
@@ -662,21 +686,21 @@ exports.addStudentsToClass = (0, errorHandler_1.asyncHandler)(async (req, res) =
         });
     }
     // Verificar que la clase existe
-    const classResult = await (0, connection_1.query)('SELECT id, section_id, academic_year_id FROM classes WHERE id = $1', [classId]);
+    const classResult = await (0, connection_1.query)('SELECT id, grade_id, section_id, academic_year_id FROM classes WHERE id = $1', [classId]);
     if (classResult.rows.length === 0) {
         return res.status(404).json({
             success: false,
             message: 'Clase no encontrada'
         });
     }
-    const { section_id: sectionId, academic_year_id: academicYearId } = classResult.rows[0];
+    const { grade_id: gradeId, section_id: sectionId, academic_year_id: academicYearId } = classResult.rows[0];
     // Obtener información de la sección para validar límite
     const sectionResult = await (0, connection_1.query)('SELECT max_students FROM sections WHERE id = $1', [sectionId]);
     const maxStudents = sectionResult.rows[0]?.max_students || 30;
-    // Contar estudiantes ya enrollados en esta sección
+    // Contar estudiantes ya enrollados en esta GRADO + SECCIÓN
     const countResult = await (0, connection_1.query)(`SELECT COUNT(DISTINCT student_id) as count 
      FROM enrollments 
-     WHERE section_id = $1 AND academic_year_id = $2 AND status = 'active'`, [sectionId, academicYearId]);
+     WHERE grade_id = $1 AND section_id = $2 AND academic_year_id = $3 AND status = 'active'`, [gradeId, sectionId, academicYearId]);
     const currentCount = parseInt(countResult.rows[0].count);
     // Validar que no exceda el límite
     if (currentCount + studentIds.length > maxStudents) {
@@ -699,9 +723,9 @@ exports.addStudentsToClass = (0, errorHandler_1.asyncHandler)(async (req, res) =
                 });
                 continue;
             }
-            // Verificar si ya está enrollado en esta sección
+            // Verificar si ya está enrollado en este GRADO + SECCIÓN
             const existingEnrollment = await (0, connection_1.query)(`SELECT id FROM enrollments 
-         WHERE student_id = $1 AND section_id = $2 AND academic_year_id = $3`, [studentId, sectionId, academicYearId]);
+         WHERE student_id = $1 AND grade_id = $2 AND section_id = $3 AND academic_year_id = $4`, [studentId, gradeId, sectionId, academicYearId]);
             if (existingEnrollment.rows.length > 0) {
                 addedEnrollments.push({
                     studentId,
@@ -711,9 +735,9 @@ exports.addStudentsToClass = (0, errorHandler_1.asyncHandler)(async (req, res) =
                 continue;
             }
             // Crear enrollment
-            const enrollmentResult = await (0, connection_1.query)(`INSERT INTO enrollments (student_id, section_id, academic_year_id, enrollment_date, status)
-         VALUES ($1, $2, $3, CURRENT_DATE, 'active')
-         RETURNING id, student_id, enrollment_date`, [studentId, sectionId, academicYearId]);
+            const enrollmentResult = await (0, connection_1.query)(`INSERT INTO enrollments (student_id, grade_id, section_id, academic_year_id, enrollment_date, status)
+         VALUES ($1, $2, $3, $4, CURRENT_DATE, 'active')
+         RETURNING id, student_id, enrollment_date`, [studentId, gradeId, sectionId, academicYearId]);
             addedEnrollments.push({
                 enrollmentId: enrollmentResult.rows[0].id,
                 studentId,

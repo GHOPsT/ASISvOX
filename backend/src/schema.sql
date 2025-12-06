@@ -135,11 +135,12 @@ CREATE INDEX idx_sections_is_active ON sections(is_active);
 
 -- ============================================
 -- TABLA: classes
--- Clases (Combinación de Sección + Materia + Profesor + Entidad)
+-- Clases (Combinación de Grado + Sección + Materia + Profesor + Entidad + Año)
 -- ============================================
 CREATE TABLE classes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     entity_id UUID NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    grade_id UUID NOT NULL REFERENCES grades(id) ON DELETE CASCADE,
     section_id UUID NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
     subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -149,11 +150,12 @@ CREATE TABLE classes (
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(section_id, subject_id, academic_year_id, entity_id)
+    UNIQUE(grade_id, section_id, subject_id, academic_year_id, entity_id)
 );
 
 -- Índices para classes
 CREATE INDEX idx_classes_entity_id ON classes(entity_id);
+CREATE INDEX idx_classes_grade_id ON classes(grade_id);
 CREATE INDEX idx_classes_section_id ON classes(section_id);
 CREATE INDEX idx_classes_subject_id ON classes(subject_id);
 CREATE INDEX idx_classes_teacher_id ON classes(teacher_id);
@@ -209,22 +211,24 @@ CREATE INDEX idx_students_last_name ON students(last_name);
 
 -- ============================================
 -- TABLA: enrollments
--- Matriculación de estudiantes en secciones
+-- Matriculación de estudiantes en grado + sección
 -- ============================================
 CREATE TABLE enrollments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    grade_id UUID NOT NULL REFERENCES grades(id) ON DELETE CASCADE,
     section_id UUID NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
     academic_year_id UUID NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE,
     enrollment_date DATE DEFAULT CURRENT_DATE,
     status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'transferred', 'graduated')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(student_id, section_id, academic_year_id)
+    UNIQUE(student_id, grade_id, section_id, academic_year_id)
 );
 
 -- Índices para enrollments
 CREATE INDEX idx_enrollments_student_id ON enrollments(student_id);
+CREATE INDEX idx_enrollments_grade_id ON enrollments(grade_id);
 CREATE INDEX idx_enrollments_section_id ON enrollments(section_id);
 CREATE INDEX idx_enrollments_academic_year_id ON enrollments(academic_year_id);
 CREATE INDEX idx_enrollments_status ON enrollments(status);

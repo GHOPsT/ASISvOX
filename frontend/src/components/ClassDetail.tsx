@@ -274,30 +274,31 @@ export function ClassDetail({ classId, onBack }: ClassDetailProps) {
             </TabsTrigger>
           </TabsList>
 
-          <div className="flex-1 overflow-hidden p-4">
-            <TabsContent value="students" className="h-full space-y-4 mt-0">
-              {/* Search and Actions */}
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar estudiante..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={() => toast.success("Lista de estudiantes exportada")}
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-                <Button 
-                  size="icon"
-                  onClick={() => setShowAddStudentsModal(true)}
-                  className="bg-green-600 hover:bg-green-700"
+          <div className="flex-1 overflow-hidden">
+            <div className="h-full overflow-y-auto">
+              <TabsContent value="students" className="h-full space-y-4 mt-0 p-4">
+                {/* Search and Actions */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar estudiante..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => toast.success("Lista de estudiantes exportada")}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    size="icon"
+                    onClick={() => setShowAddStudentsModal(true)}
+                    className="bg-green-600 hover:bg-green-700"
                 >
                   <UserPlus className="h-4 w-4" />
                 </Button>
@@ -371,7 +372,7 @@ export function ClassDetail({ classId, onBack }: ClassDetailProps) {
               )}
             </TabsContent>
 
-            <TabsContent value="setup" className="h-full space-y-4 mt-0">
+            <TabsContent value="setup" className="h-full space-y-4 mt-0 p-4">
               <AssessmentSetup
                 classId={classId}
                 onAssessmentsChange={handleAssessmentsChange}
@@ -379,7 +380,7 @@ export function ClassDetail({ classId, onBack }: ClassDetailProps) {
               />
             </TabsContent>
 
-            <TabsContent value="grades" className="h-full mt-0">
+            <TabsContent value="grades" className="h-full mt-0 p-0">
               <GradingInterface
                 students={students}
                 assessments={assessments}
@@ -387,7 +388,7 @@ export function ClassDetail({ classId, onBack }: ClassDetailProps) {
               />
             </TabsContent>
 
-            <TabsContent value="voice" className="h-full space-y-4 mt-0">
+            <TabsContent value="voice" className="h-full space-y-4 mt-0 p-4">
               <VoiceGrading
                 students={students}
                 onGradeUpdate={handleGradeUpdate}
@@ -409,6 +410,7 @@ export function ClassDetail({ classId, onBack }: ClassDetailProps) {
                 </div>
               </Card>
             </TabsContent>
+            </div>
           </div>
         </Tabs>
       </div>

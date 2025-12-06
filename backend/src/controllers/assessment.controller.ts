@@ -127,8 +127,20 @@ export const getAssessment = asyncHandler(async (req: AuthenticatedRequest, res:
 export const createAssessment = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { class_id, assessment_type_id, name, description, due_date, max_score } = req.body;
 
-  if (!class_id || !name || !max_score) {
-    throw createError('class_id, name y max_score son requeridos', 400);
+  console.log('📋 Backend - createAssessment recibió:');
+  console.log('  - req.body completo:', req.body);
+  console.log('  - class_id:', class_id);
+  console.log('  - assessment_type_id:', assessment_type_id);
+  console.log('  - name:', name);
+  console.log('  - max_score:', max_score);
+
+  if (!class_id || !name || !max_score || !assessment_type_id) {
+    console.error('❌ Validación fallida. Campos faltantes:');
+    if (!class_id) console.error('  - Falta class_id');
+    if (!name) console.error('  - Falta name');
+    if (!max_score) console.error('  - Falta max_score');
+    if (!assessment_type_id) console.error('  - Falta assessment_type_id');
+    throw createError('class_id, name, max_score y assessment_type_id son requeridos', 400);
   }
 
   // Validar que el usuario puede crear evaluación en esta clase
@@ -156,6 +168,12 @@ export const createAssessment = asyncHandler(async (req: AuthenticatedRequest, r
      RETURNING id, class_id, assessment_type_id, name, description, due_date, max_score, created_at`,
     [class_id, assessment_type_id || null, name, description || null, due_date || null, max_score]
   );
+
+  console.log('✅ Evaluación insertada exitosamente:');
+  console.log('  - ID:', result.rows[0].id);
+  console.log('  - Nombre:', result.rows[0].name);
+  console.log('  - class_id:', result.rows[0].class_id);
+  console.log('  - assessment_type_id:', result.rows[0].assessment_type_id);
 
   const response: ApiResponse<any> = {
     success: true,

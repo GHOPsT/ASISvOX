@@ -60,6 +60,7 @@ export function GradingInterface({ classId, students: initialStudents = [], asse
   const [selectedAssessment, setSelectedAssessment] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
   useEffect(() => {
     if (classId) {
@@ -104,6 +105,11 @@ export function GradingInterface({ classId, students: initialStudents = [], asse
         score: g.score,
         id: g.id
       })));
+
+      // Si hay calificaciones guardadas, activar modo lectura
+      if (gradesData && gradesData.length > 0) {
+        setIsReadOnly(true);
+      }
     } catch (error) {
       console.error('Error loading grading data:', error);
       toast.error('Error al cargar datos de calificación');
@@ -217,6 +223,15 @@ export function GradingInterface({ classId, students: initialStudents = [], asse
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  const handleTabChange = (value: string) => {
+    // Si hace clic en la pestaña que ya está activa, contraer (vaciar la selección)
+    if (selectedAssessment === value) {
+      setSelectedAssessment("");
+    } else {
+      setSelectedAssessment(value);
+    }
+  };
+
   if (assessments.length === 0) {
     return (
       <Card className="p-6 text-center">
@@ -229,7 +244,7 @@ export function GradingInterface({ classId, students: initialStudents = [], asse
   }
 
   return (
-    <div className="h-full flex flex-col space-y-4">
+    <div className="w-full h-full flex flex-col space-y-4 px-4 md:px-0">
       {isLoading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -239,195 +254,236 @@ export function GradingInterface({ classId, students: initialStudents = [], asse
         </div>
       ) : (
         <>
-      {/* Assessment Tabs */}
-      <Tabs value={selectedAssessment} onValueChange={setSelectedAssessment} className="h-full flex flex-col">
-        <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${assessments.length || 1}, 1fr)` }}>
-          {assessments.map((assessment) => {
-            const Icon = assessment.icon;
-            const completion = getCompletionPercentage(assessment.id);
-            
-            return (
-              <TabsTrigger key={assessment.id} value={assessment.id} className="flex flex-col gap-1 p-2">
-                <div className="flex items-center gap-1">
-                  <Icon className="h-3 w-3" />
-                  <span className="text-xs truncate">{assessment.name}</span>
-                </div>
-                <div className="text-xs text-muted-foreground">{completion.toFixed(0)}%</div>
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
-
-        <div className="flex-1 overflow-hidden">
-          {assessments.map((assessment) => {
-            const Icon = assessment.icon;
-            const completion = getCompletionPercentage(assessment.id);
-            
-            return (
-              <TabsContent key={assessment.id} value={assessment.id} className="h-full flex flex-col space-y-4 mt-0">
-              {/* Assessment Header */}
-              <Card className={`p-3 ${assessment.color}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Icon className="h-4 w-4" />
-                    <div>
-                      <h4 className="text-sm font-medium">{assessment.name}</h4>
-                      <p className="text-xs opacity-80">
-                        Peso: {assessment.weight}% • Máximo: {assessment.maxScore} pts
-                      </p>
-                    </div>
-                  </div>
-                </div>
+          {/* Assessment Tabs - Responsive */}
+          <Tabs value={selectedAssessment} onValueChange={handleTabChange} className="w-full">
+            <TabsList className="grid w-full gap-1 bg-slate-100 p-1 rounded-lg" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(120px, 1fr))` }}>
+              {assessments.map((assessment) => {
+                const Icon = assessment.icon;
+                const completion = getCompletionPercentage(assessment.id);
                 
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span>Progreso</span>
-                    <span>{Math.round(completion)}%</span>
-                  </div>
-                  <Progress value={completion} className="h-1.5" />
-                </div>
-              </Card>
+                return (
+                  <TabsTrigger 
+                    key={assessment.id} 
+                    value={assessment.id} 
+                    className="flex flex-col gap-1 py-3 px-2 data-[state=active]:bg-white data-[state=active]:shadow-md rounded-md transition-all"
+                  >
+                    <div className="flex items-center gap-1 justify-center">
+                      {Icon && <Icon className="h-4 w-4" />}
+                      <span className="text-xs font-medium line-clamp-1">{assessment.name}</span>
+                    </div>
+                    <div className="text-xs font-semibold text-blue-600">{completion.toFixed(0)}%</div>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
 
-              {/* Action Buttons */}
-              <div className="flex gap-2">
-                <Button onClick={saveGrades} size="sm" className="flex-1 gap-2 h-8">
-                  <Save className="h-3 w-3" />
-                  Guardar
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => clearGrades(assessment.id)}
-                  className="gap-2 h-8"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Limpiar
-                </Button>
-              </div>
-
-              {/* Students Grading */}
-              <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                {students.map((student) => {
-                  const currentGrade = getStudentGrade(student.id, assessment.id);
-                  const finalGrade = calculateFinalGrade(student.id);
-                  const status = currentGrade && assessment.maxScore ? getGradeStatus(currentGrade, assessment.maxScore) : null;
+            {/* Assessment Content */}
+            <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+              {/* Main Grading Area - Left/Top */}
+              <div className="lg:col-span-2 flex flex-col space-y-4 min-h-0">
+                {assessments.map((assessment) => {
+                  if (assessment.id !== selectedAssessment) return null;
+                  
+                  const Icon = assessment.icon;
+                  const completion = getCompletionPercentage(assessment.id);
                   
                   return (
-                    <Card key={student.id} className="p-3">
-                      <div className="space-y-3">
-                        {/* Student Header */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                                {getInitials(student.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            
+                    <div key={assessment.id} className="flex flex-col space-y-4 h-full">
+                      {/* Assessment Header */}
+                      <Card className={`p-6 border-0 shadow-md ${assessment.color} rounded-xl`}>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-4">
+                            {Icon && <Icon className="h-6 w-6" />}
                             <div>
-                              <p className="font-medium text-sm">{student.name}</p>
-                              <p className="text-xs text-muted-foreground">{student.code}</p>
-                            </div>
-                          </div>
-
-                          {currentGrade !== undefined && (
-                            <Badge 
-                              variant={status?.color.includes('red') ? 'destructive' : 'default'}
-                              className="text-xs"
-                            >
-                              {status?.label}
-                            </Badge>
-                          )}
-                        </div>
-
-                        {/* Grading Input */}
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="number"
-                                min="0"
-                                max={assessment.maxScore || 100}
-                                step="0.1"
-                                placeholder="0.0"
-                                value={currentGrade || ""}
-                                onChange={(e) => {
-                                  const score = parseFloat(e.target.value);
-                                  const maxScore = assessment.maxScore || 100;
-                                  if (!isNaN(score) && score >= 0 && score <= maxScore) {
-                                    updateGrade(student.id, assessment.id, score);
-                                  } else if (e.target.value === "") {
-                                    // Clear grade if input is empty
-                                    setGrades(prev => prev.filter(g => !(g.studentId === student.id && g.assessmentId === assessment.id)));
-                                  }
-                                }}
-                                className="w-20 h-8 text-sm"
-                              />
-                              <span className="text-xs text-muted-foreground">
-                                / {assessment.maxScore || 100}
-                              </span>
-                            </div>
-                          </div>
-
-                          {currentGrade !== undefined && (
-                            <div className="text-center">
-                              <p className="text-xs font-medium">
-                                {((currentGrade / (assessment.maxScore || 100)) * 100).toFixed(1)}%
+                              <h3 className="font-bold text-lg">{assessment.name}</h3>
+                              <p className="text-sm opacity-80">
+                                Peso: <span className="font-semibold">{assessment.weight}%</span> • Máximo: <span className="font-semibold">{assessment.maxScore} pts</span>
                               </p>
                             </div>
-                          )}
+                          </div>
                         </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center text-sm font-semibold">
+                            <span>Progreso General</span>
+                            <span className="text-lg">{Math.round(completion)}%</span>
+                          </div>
+                          <Progress value={completion} className="h-3 rounded-full" />
+                        </div>
+                      </Card>
 
-                        {/* Progress Bar */}
-                        {currentGrade !== undefined && (
-                          <Progress 
-                            value={(currentGrade / (assessment.maxScore || 100)) * 100} 
-                            className="h-1.5"
-                          />
-                        )}
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 flex-col sm:flex-row">
+                        <Button 
+                          onClick={saveGrades} 
+                          size="lg"
+                          className="flex-1 h-11 text-base gap-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transition-all"
+                          disabled={isSaving || isReadOnly}
+                        >
+                          <Save className="h-5 w-5" />
+                          {isSaving ? 'Guardando...' : 'Guardar Calificaciones'}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="lg"
+                          onClick={() => clearGrades(assessment.id)}
+                          className="h-11 text-base gap-2 border-2"
+                          disabled={isReadOnly}
+                        >
+                          <RotateCcw className="h-5 w-5" />
+                          Limpiar
+                        </Button>
                       </div>
-                    </Card>
+
+                      {/* Students Grading List */}
+                      <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                        {students.map((student) => {
+                          const currentGrade = getStudentGrade(student.id, assessment.id);
+                          const percentage = currentGrade && assessment.maxScore ? (currentGrade / assessment.maxScore) * 100 : 0;
+                          
+                          return (
+                            <Card key={student.id} className="p-4 border border-border/50 shadow-none hover:shadow-lg transition-all duration-200 rounded-lg">
+                              <div className="space-y-4">
+                                {/* Student Info */}
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                                    <Avatar className="h-10 w-10 flex-shrink-0 border-2 border-primary/20">
+                                      <AvatarFallback className="bg-gradient-to-br from-blue-400 to-blue-600 text-white text-sm font-bold">
+                                        {getInitials(student.name)}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-semibold text-base truncate">{student.name}</p>
+                                      <p className="text-sm text-muted-foreground">{student.code}</p>
+                                    </div>
+                                  </div>
+
+                                  {currentGrade !== undefined && (
+                                    <Badge 
+                                      className={`text-sm font-bold px-3 py-1 ml-2 flex-shrink-0 ${
+                                        percentage >= 60 ? 'bg-green-100 text-green-800 hover:bg-green-100' :
+                                        percentage >= 40 ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100' :
+                                        'bg-red-100 text-red-800 hover:bg-red-100'
+                                      }`}
+                                    >
+                                      {percentage.toFixed(0)}%
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                {/* Grade Input Section */}
+                                <div className="border-t border-border/30 pt-4">
+                                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                                    <div className="flex items-center gap-3 flex-1 w-full sm:w-auto">
+                                      <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Calificación:</span>
+                                      {isReadOnly ? (
+                                        <div className="h-11 flex items-center px-4 bg-gray-100 rounded-md border border-gray-200 text-lg font-bold text-gray-700 flex-1 sm:flex-none sm:w-28">
+                                          {currentGrade || "—"}
+                                        </div>
+                                      ) : (
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          max={assessment.maxScore || 100}
+                                          step="0.1"
+                                          placeholder="0.0"
+                                          value={currentGrade || ""}
+                                          onChange={(e) => {
+                                            const score = parseFloat(e.target.value);
+                                            const maxScore = assessment.maxScore || 100;
+                                            if (!isNaN(score) && score >= 0 && score <= maxScore) {
+                                              updateGrade(student.id, assessment.id, score);
+                                            } else if (e.target.value === "") {
+                                              setGrades(prev => prev.filter(g => !(g.studentId === student.id && g.assessmentId === assessment.id)));
+                                            }
+                                          }}
+                                          className="h-11 text-lg font-bold text-center flex-1 sm:flex-none sm:w-28"
+                                        />
+                                      )}
+                                      <span className="text-lg font-bold text-muted-foreground whitespace-nowrap">
+                                        / {assessment.maxScore || 100}
+                                      </span>
+                                    </div>
+
+                                    {currentGrade !== undefined && (
+                                      <div className="w-full sm:w-32">
+                                        <Progress 
+                                          value={percentage} 
+                                          className="h-2"
+                                        />
+                                        <p className="text-xs text-center text-muted-foreground mt-1 font-medium">
+                                          {percentage.toFixed(1)}%
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
 
-              {/* Summary - Fixed at bottom */}
-              <Card className="p-3 bg-muted/50 mt-auto">
-                <h5 className="text-sm font-medium mb-2">Resumen</h5>
-                <div className="grid grid-cols-3 gap-3 text-center">
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {students.filter(s => getStudentGrade(s.id, assessment.id) !== undefined).length}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Calificados</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {grades
-                        .filter(g => g.assessmentId === assessment.id && g.score > 0)
-                        .length > 0
-                        ? (grades
-                            .filter(g => g.assessmentId === assessment.id)
-                            .reduce((sum, g) => sum + (g.score / (assessment.maxScore || 100)) * 100, 0) /
-                          grades.filter(g => g.assessmentId === assessment.id).length
-                        ).toFixed(1)
-                        : 0}%
-                    </p>
-                    <p className="text-xs text-muted-foreground">Promedio</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {grades.filter(g => g.assessmentId === assessment.id && (g.score / (assessment.maxScore || 100)) >= 0.6).length}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Aprobados</p>
-                  </div>
-                </div>
-              </Card>
-              </TabsContent>
-            );
-          })}
-        </div>
-      </Tabs>
+              {/* Summary Sidebar - Right/Bottom */}
+              <div className="lg:col-span-1 flex flex-col space-y-4">
+                {assessments.map((assessment) => {
+                  if (assessment.id !== selectedAssessment) return null;
+                  
+                  const calificados = students.filter(s => getStudentGrade(s.id, assessment.id) !== undefined).length;
+                  const pendientes = students.length - calificados;
+                  const promedio = grades
+                    .filter(g => g.assessmentId === assessment.id && g.score > 0)
+                    .length > 0
+                    ? (grades
+                        .filter(g => g.assessmentId === assessment.id)
+                        .reduce((sum, g) => sum + (g.score / (assessment.maxScore || 100)) * 100, 0) /
+                      grades.filter(g => g.assessmentId === assessment.id).length
+                    ).toFixed(1)
+                    : 0;
+                  const aprobados = grades.filter(g => g.assessmentId === assessment.id && (g.score / (assessment.maxScore || 100)) >= 0.6).length;
+                  
+                  return (
+                    <div key={assessment.id} className="space-y-4">
+                      {/* Resumen Card */}
+                      <Card className="p-6 bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 shadow-md rounded-xl sticky top-4">
+                        <h4 className="text-lg font-bold text-slate-800 mb-4">Resumen</h4>
+                        <div className="space-y-3">
+                          {/* Calificados */}
+                          <div className="bg-white rounded-lg p-4 border-2 border-blue-200">
+                            <p className="text-2xl font-bold text-blue-600 text-center">{calificados}</p>
+                            <p className="text-xs text-slate-600 text-center mt-1 font-medium">Calificados</p>
+                          </div>
+
+                          {/* Pendientes */}
+                          <div className="bg-white rounded-lg p-4 border-2 border-orange-200">
+                            <p className="text-2xl font-bold text-orange-600 text-center">{pendientes}</p>
+                            <p className="text-xs text-slate-600 text-center mt-1 font-medium">Pendientes</p>
+                          </div>
+
+                          {/* Promedio */}
+                          <div className="bg-white rounded-lg p-4 border-2 border-purple-200">
+                            <p className="text-2xl font-bold text-purple-600 text-center">{promedio}%</p>
+                            <p className="text-xs text-slate-600 text-center mt-1 font-medium">Promedio</p>
+                          </div>
+
+                          {/* Aprobados */}
+                          <div className="bg-white rounded-lg p-4 border-2 border-green-200">
+                            <p className="text-2xl font-bold text-green-600 text-center">{aprobados}</p>
+                            <p className="text-xs text-slate-600 text-center mt-1 font-medium">Aprobados</p>
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Tabs>
         </>
       )}
     </div>

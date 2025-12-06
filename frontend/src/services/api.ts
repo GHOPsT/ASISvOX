@@ -294,6 +294,7 @@ class ApiClient {
     createClass: async (data: any): Promise<ApiResponse<Class>> => {
       // Convertir camelCase a snake_case para el backend
       const backendData = {
+        grade_id: data.gradeId,
         subject_id: data.subjectId,
         section_id: data.sectionId,
         academic_year_id: data.academicYearId,
@@ -392,7 +393,16 @@ class ApiClient {
 
   assessments: AssessmentAPI = {
     getAssessments: async (filters = {}): Promise<PaginatedResponse<Assessment>> => {
-      const params = new URLSearchParams(filters as any).toString();
+      // Convertir camelCase a snake_case para el backend
+      const backendFilters: any = {};
+      for (const [key, value] of Object.entries(filters)) {
+        if (key === 'classId') {
+          backendFilters['class_id'] = value;
+        } else {
+          backendFilters[key] = value;
+        }
+      }
+      const params = new URLSearchParams(backendFilters as any).toString();
       return this.get<PaginatedResponse<Assessment>>(`/assessments?${params}`);
     },
 
@@ -401,7 +411,23 @@ class ApiClient {
     },
 
     createAssessment: async (data: any): Promise<ApiResponse<Assessment>> => {
-      return this.post<ApiResponse<Assessment>>('/assessments', data);
+      // Convertir camelCase a snake_case para el backend
+      const backendData = {
+        class_id: data.classId,
+        name: data.name,
+        max_score: data.maxScore,
+        type: data.type,
+        weight: data.weight,
+        description: data.description,
+        due_date: data.dueDate,
+        assessment_type_id: data.assessmentTypeId,
+        date: data.date
+      };
+      console.log('🔄 API createAssessment - Frontend data:', data);
+      console.log('🔄 API createAssessment - Backend data a enviar:', backendData);
+      const response = await this.post<ApiResponse<Assessment>>('/assessments', backendData);
+      console.log('🔄 API createAssessment - Response:', response);
+      return response;
     },
 
     updateAssessment: async (id: string, data: Partial<Assessment>): Promise<ApiResponse<Assessment>> => {
@@ -411,6 +437,10 @@ class ApiClient {
     deleteAssessment: async (id: string): Promise<ApiResponse<void>> => {
       return this.delete<ApiResponse<void>>(`/assessments/${id}`);
     },
+
+    getAssessmentTypes: async (): Promise<ApiResponse<any[]>> => {
+      return this.get<ApiResponse<any[]>>(`/assessments/types`);
+    },
   };
 
   // ===============================
@@ -419,12 +449,32 @@ class ApiClient {
 
   grading: GradingAPI = {
     getGrades: async (filters = {}): Promise<PaginatedResponse<Grade>> => {
-      const params = new URLSearchParams(filters as any).toString();
+      // Convertir camelCase a snake_case para el backend
+      const backendFilters: any = {};
+      for (const [key, value] of Object.entries(filters)) {
+        if (key === 'classId') {
+          backendFilters['class_id'] = value;
+        } else if (key === 'studentId') {
+          backendFilters['student_id'] = value;
+        } else if (key === 'assessmentId') {
+          backendFilters['assessment_id'] = value;
+        } else {
+          backendFilters[key] = value;
+        }
+      }
+      const params = new URLSearchParams(backendFilters as any).toString();
       return this.get<PaginatedResponse<Grade>>(`/grades?${params}`);
     },
 
     recordGrade: async (data: any): Promise<ApiResponse<Grade>> => {
-      return this.post<ApiResponse<Grade>>('/grades', data);
+      // Convertir camelCase a snake_case para el backend
+      const backendData = {
+        assessment_id: data.assessmentId,
+        student_id: data.studentId,
+        score: data.score,
+        method: data.method
+      };
+      return this.post<ApiResponse<Grade>>('/grades', backendData);
     },
 
     updateGrade: async (id: string, data: Partial<Grade>): Promise<ApiResponse<Grade>> => {

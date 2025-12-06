@@ -43,11 +43,36 @@ export function AssessmentSetup({ classId, onAssessmentsChange, selectedDate }: 
   const [customAssessmentName, setCustomAssessmentName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedAssessments, setSelectedAssessments] = useState<Assessment[]>([]);
+  const [assessmentTypes, setAssessmentTypes] = useState<any[]>([]);
+  const [assessmentTypeMap, setAssessmentTypeMap] = useState<Record<string, string>>({});
 
-  // Cargar evaluaciones del API cuando el componente se monta
+  // Cargar tipos de evaluación y evaluaciones cuando el componente se monta
   useEffect(() => {
+    loadAssessmentTypes();
     loadAssessments();
   }, [classId]);
+
+  const loadAssessmentTypes = async () => {
+    try {
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
+
+      const response = await apiClient.assessments.getAssessmentTypes();
+      const types = response?.data || [];
+      setAssessmentTypes(types);
+
+      // Crear mapa: nombre → id (UUID)
+      const map: Record<string, string> = {};
+      types.forEach((type: any) => {
+        map[type.name.toLowerCase()] = type.id;
+      });
+      setAssessmentTypeMap(map);
+    } catch (error) {
+      console.error('Error loading assessment types:', error);
+    }
+  };
 
   const loadAssessments = async () => {
     try {
@@ -82,14 +107,29 @@ export function AssessmentSetup({ classId, onAssessmentsChange, selectedDate }: 
     }
   };
 
-  // Tipos de evaluación predefinidos
-  const assessmentTypes = [
-    { id: "practica", name: "Práctica Calificada", icon: PenTool, color: "bg-blue-100 text-blue-700" },
-    { id: "examen", name: "Examen", icon: FileText, color: "bg-red-100 text-red-700" },
-    { id: "test_entrada", name: "Test de Entrada", icon: BookOpen, color: "bg-green-100 text-green-700" },
-    { id: "practica_oral", name: "Práctica Oral", icon: CheckCircle, color: "bg-purple-100 text-purple-700" },
-    { id: "participacion", name: "Participación", icon: AlertCircle, color: "bg-orange-100 text-orange-700" },
-    { id: "trabajo_grupal", name: "Trabajo Grupal", icon: Settings, color: "bg-indigo-100 text-indigo-700" }
+  // Mapeo de iconos y colores para tipos de evaluación
+  const getAssessmentTypeDisplay = (typeName: string) => {
+    const displays: Record<string, { icon: any; color: string }> = {
+      'examen': { icon: FileText, color: 'bg-red-100 text-red-700' },
+      'tarea': { icon: PenTool, color: 'bg-blue-100 text-blue-700' },
+      'participación': { icon: AlertCircle, color: 'bg-orange-100 text-orange-700' },
+      'proyecto': { icon: CheckCircle, color: 'bg-purple-100 text-purple-700' },
+      'quiz': { icon: BookOpen, color: 'bg-green-100 text-green-700' },
+      'trabajo en grupo': { icon: Settings, color: 'bg-indigo-100 text-indigo-700' },
+      'presentación': { icon: CheckCircle, color: 'bg-yellow-100 text-yellow-700' }
+    };
+    return displays[typeName.toLowerCase()] || { icon: FileText, color: 'bg-gray-100 text-gray-700' };
+  };
+
+  // Tipos de evaluación predefinidos - Ahora cargados del servidor
+  const predefinedTypes = [
+    { name: "Práctica Calificada", label: "Tarea" },
+    { name: "Examen", label: "Examen" },
+    { name: "Test de Entrada", label: "Quiz" },
+    { name: "Práctica Oral", label: "Quiz" },
+    { name: "Participación", label: "Participación" },
+    { name: "Trabajo en Grupo", label: "Trabajo en Grupo" },
+    { name: "Presentación", label: "Presentación" }
   ];
 
   const getCurrentDateString = () => {
@@ -100,55 +140,73 @@ export function AssessmentSetup({ classId, onAssessmentsChange, selectedDate }: 
     });
   };
 
-  const getValidAssessmentType = (typeId: string): 'exam' | 'quiz' | 'homework' | 'project' | 'participation' => {
-    const typeMap: Record<string, 'exam' | 'quiz' | 'homework' | 'project' | 'participation'> = {
-      'examen': 'exam',
-      'practica': 'homework',
-      'test_entrada': 'quiz',
-      'practica_oral': 'quiz',
-      'participacion': 'participation',
-      'trabajo_grupal': 'project'
-    };
-    return typeMap[typeId] || 'homework';
-  };
-
-  const addAssessment = async (typeId: string) => {
-    const type = assessmentTypes.find(t => t.id === typeId);
-    if (!type) return;
+  const addAssessment = async (typeName: string) => {
+    const typeLabel = predefinedTypes.find(t => t.name === typeName);
+    if (!typeLabel) {
+      console.warn(`⚠️ Tipo no encontrado en predefinedTypes:`, typeName);
+      return;
+    }
 
     try {
-      const validType = getValidAssessmentType(typeId);
+      console.log('📝 Iniciando creación de evaluación...');
+      console.log('  - typeName:', typeName);
+      console.log('  - typeLabel:', typeLabel);
+      console.log('  - assessmentTypeMap:', assessmentTypeMap);
+      
+      // Usar el UUID para el tipo de evaluación seleccionado
+      const assessmentTypeUUID = assessmentTypeMap[typeLabel.name.toLowerCase()];
+      console.log('  - assessmentTypeUUID:', assessmentTypeUUID);
+      
+      if (!assessmentTypeUUID) {
+        console.error(`❌ UUID no encontrado para tipo: ${typeLabel.label}`);
+        toast.error(`Tipo de evaluación "${typeLabel.label}" no encontrado`);
+        return;
+      }
+
       const newAssessment = {
-        name: type.name,
-        type: validType,
+        name: typeName,
+        type: 'homework' as const,
         weight: 100,
         maxScore: 20,
         classId: classId,
-        date: new Date()
+        assessmentTypeId: assessmentTypeUUID,
+        dueDate: new Date()
       };
+      console.log('  - Enviando al backend:', newAssessment);
 
       const response = await apiClient.assessments.createAssessment(newAssessment);
+      console.log('  - Respuesta del backend:', response);
+      
       const createdAssessment = response?.data;
       
       if (createdAssessment) {
+        console.log('✅ Evaluación creada exitosamente:', createdAssessment);
+        const display = getAssessmentTypeDisplay(typeLabel.label);
         const assessment: Assessment = {
           id: createdAssessment.id,
           name: createdAssessment.name,
           type: createdAssessment.type,
           weight: createdAssessment.weight || 100,
           maxScore: createdAssessment.maxScore || 20,
-          icon: type.icon,
-          color: type.color
+          icon: display.icon,
+          color: display.color
         };
         
         setSelectedAssessments(prev => [...prev, assessment]);
         if (onAssessmentsChange) {
           onAssessmentsChange([...selectedAssessments, assessment]);
         }
-        toast.success(`${type.name} agregada`);
+        toast.success(`${typeName} agregada`);
+      } else {
+        console.warn('⚠️ Respuesta sin data:', response);
+        toast.error('No se recibieron datos de la evaluación creada');
       }
     } catch (error) {
-      console.error('Error creating assessment:', error);
+      console.error('❌ Error al crear evaluación:', error);
+      if (error instanceof Error) {
+        console.error('  - Mensaje:', error.message);
+        console.error('  - Stack:', error.stack);
+      }
       toast.error('Error al crear evaluación');
     }
   };
@@ -160,19 +218,38 @@ export function AssessmentSetup({ classId, onAssessmentsChange, selectedDate }: 
     }
 
     try {
+      console.log('📝 Iniciando creación de evaluación personalizada...');
+      console.log('  - Nombre:', customAssessmentName);
+      console.log('  - assessmentTypeMap:', assessmentTypeMap);
+      
+      // Usar el UUID para "Tarea" como tipo de evaluación personalizada
+      const assessmentTypeUUID = assessmentTypeMap['tarea'];
+      console.log('  - assessmentTypeUUID para "tarea":', assessmentTypeUUID);
+      
+      if (!assessmentTypeUUID) {
+        console.error('❌ UUID no encontrado para tipo "tarea"');
+        toast.error("Tipo 'Tarea' no encontrado");
+        return;
+      }
+
       const newAssessment = {
         name: customAssessmentName,
         type: 'homework' as const,
         weight: 100,
         maxScore: 20,
         classId: classId,
-        date: new Date()
+        assessmentTypeId: assessmentTypeUUID,
+        dueDate: new Date()
       };
+      console.log('  - Enviando al backend:', newAssessment);
 
       const response = await apiClient.assessments.createAssessment(newAssessment);
+      console.log('  - Respuesta del backend:', response);
+      
       const createdAssessment = response?.data;
       
       if (createdAssessment) {
+        console.log('✅ Evaluación personalizada creada exitosamente:', createdAssessment);
         const assessment: Assessment = {
           id: createdAssessment.id,
           name: createdAssessment.name,
@@ -189,9 +266,16 @@ export function AssessmentSetup({ classId, onAssessmentsChange, selectedDate }: 
         }
         setCustomAssessmentName("");
         toast.success(`${customAssessmentName} agregada`);
+      } else {
+        console.warn('⚠️ Respuesta sin data:', response);
+        toast.error('No se recibieron datos de la evaluación creada');
       }
     } catch (error) {
-      console.error('Error creating custom assessment:', error);
+      console.error('❌ Error al crear evaluación personalizada:', error);
+      if (error instanceof Error) {
+        console.error('  - Mensaje:', error.message);
+        console.error('  - Stack:', error.stack);
+      }
       toast.error('Error al crear evaluación personalizada');
     }
   };
@@ -294,17 +378,18 @@ export function AssessmentSetup({ classId, onAssessmentsChange, selectedDate }: 
               <div>
                 <Label className="text-sm font-medium">Tipos de Evaluación</Label>
                 <div className="grid grid-cols-2 gap-2 mt-2">
-                  {assessmentTypes.map((type) => {
-                    const Icon = type.icon;
-                    const isSelected = selectedAssessments.some(a => a.type === type.id);
+                  {predefinedTypes.map((type) => {
+                    const display = getAssessmentTypeDisplay(type.label);
+                    const Icon = display.icon;
+                    const isSelected = selectedAssessments.some(a => a.name === type.name);
                     
                     return (
                       <Button
-                        key={type.id}
+                        key={type.name}
                         variant={isSelected ? "default" : "outline"}
                         size="sm"
                         className="h-auto p-3 flex-col gap-1"
-                        onClick={() => addAssessment(type.id)}
+                        onClick={() => addAssessment(type.name)}
                         disabled={isSelected}
                       >
                         <Icon className="h-4 w-4" />

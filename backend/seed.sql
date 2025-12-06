@@ -136,15 +136,22 @@ BEGIN
     SELECT id INTO v_subject_physics_id FROM subjects WHERE code = 'PHYS';
     SELECT id INTO v_subject_english_id FROM subjects WHERE code = 'ENGLISH';
 
-    -- Insertar grados (10°, 11°)
-    INSERT INTO grades (name, level, is_active) 
-    SELECT '10° Grado', 10, true
-    WHERE NOT EXISTS (SELECT 1 FROM grades WHERE level = 10);
+    -- Insertar grados (1° a 6° Primaria, 1° a 5° Secundaria)
+    INSERT INTO grades (name, level, is_active) VALUES
+        ('1° Primaria', 1, true),
+        ('2° Primaria', 2, true),
+        ('3° Primaria', 3, true),
+        ('4° Primaria', 4, true),
+        ('5° Primaria', 5, true),
+        ('6° Primaria', 6, true),
+        ('1° Secundaria', 7, true),
+        ('2° Secundaria', 8, true),
+        ('3° Secundaria', 9, true),
+        ('4° Secundaria', 10, true),
+        ('5° Secundaria', 11, true)
+    ON CONFLICT DO NOTHING;
     
-    INSERT INTO grades (name, level, is_active) 
-    SELECT '11° Grado', 11, true
-    WHERE NOT EXISTS (SELECT 1 FROM grades WHERE level = 11);
-    
+    -- Obtener grados para pruebas (usar 10° que ahora es 4° Secundaria)
     SELECT id INTO v_grade_10_id FROM grades WHERE level = 10;
     SELECT id INTO v_grade_11_id FROM grades WHERE level = 11;
 
@@ -190,19 +197,19 @@ BEGIN
         -- ============================================
         
         -- Clase 1: Matemáticas 10°A (Profesor María González)
-        INSERT INTO classes (entity_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active) 
-        SELECT v_entity_test_id, v_section_a_id, v_subject_math_id, v_teacher_id, v_academic_year_id, 'Aula 101', 52, true
+        INSERT INTO classes (entity_id, grade_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active) 
+        SELECT v_entity_test_id, v_grade_10_id, v_section_a_id, v_subject_math_id, v_teacher_id, v_academic_year_id, 'Aula 101', 52, true
         WHERE NOT EXISTS (
             SELECT 1 FROM classes 
-            WHERE section_id = v_section_a_id AND subject_id = v_subject_math_id AND teacher_id = v_teacher_id AND academic_year_id = v_academic_year_id
+            WHERE grade_id = v_grade_10_id AND section_id = v_section_a_id AND subject_id = v_subject_math_id AND teacher_id = v_teacher_id AND academic_year_id = v_academic_year_id
         );
 
         -- Clase 2: Física 10°B (Profesor María González)
-        INSERT INTO classes (entity_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active) 
-        SELECT v_entity_test_id, v_section_b_id, v_subject_physics_id, v_teacher_id, v_academic_year_id, 'Aula 102', 52, true
+        INSERT INTO classes (entity_id, grade_id, section_id, subject_id, teacher_id, academic_year_id, classroom, weeks_duration, is_active) 
+        SELECT v_entity_test_id, v_grade_10_id, v_section_b_id, v_subject_physics_id, v_teacher_id, v_academic_year_id, 'Aula 102', 52, true
         WHERE NOT EXISTS (
             SELECT 1 FROM classes 
-            WHERE section_id = v_section_b_id AND subject_id = v_subject_physics_id AND teacher_id = v_teacher_id AND academic_year_id = v_academic_year_id
+            WHERE grade_id = v_grade_10_id AND section_id = v_section_b_id AND subject_id = v_subject_physics_id AND teacher_id = v_teacher_id AND academic_year_id = v_academic_year_id
         );
 
         -- ============================================
@@ -268,9 +275,8 @@ DECLARE
 BEGIN
     -- Obtener las IDs necesarias
     SELECT id INTO v_academic_year_id FROM academic_years WHERE is_current = true LIMIT 1;
-    SELECT id INTO v_section_a_id FROM sections 
-    WHERE grade_id = (SELECT id FROM grades WHERE level = 10)
-    AND name = 'A' AND academic_year_id = v_academic_year_id LIMIT 1;
+    SELECT id INTO v_section_a_id FROM sections WHERE name = 'A' LIMIT 1;
+    SELECT id INTO v_grade_10_id FROM grades WHERE level = 10 LIMIT 1;
     
     -- Obtener IDs de estudiantes
     SELECT ARRAY_AGG(id) INTO v_student_ids FROM students 
@@ -280,11 +286,12 @@ BEGIN
     IF v_student_ids IS NOT NULL THEN
         FOREACH v_student_id IN ARRAY v_student_ids
         LOOP
-            INSERT INTO enrollments (student_id, section_id, academic_year_id, status, enrollment_date)
-            SELECT v_student_id, v_section_a_id, v_academic_year_id, 'active', CURRENT_DATE
+            INSERT INTO enrollments (student_id, grade_id, section_id, academic_year_id, status, enrollment_date)
+            SELECT v_student_id, v_grade_10_id, v_section_a_id, v_academic_year_id, 'active', CURRENT_DATE
             WHERE NOT EXISTS (
                 SELECT 1 FROM enrollments 
                 WHERE student_id = v_student_id 
+                AND grade_id = v_grade_10_id
                 AND section_id = v_section_a_id
             );
         END LOOP;

@@ -27,6 +27,7 @@ const DAYS = [
 
 export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
   const [formData, setFormData] = useState({
+    gradeId: "",
     subjectId: "",
     sectionId: "",
     academicYearId: "",
@@ -35,6 +36,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
     schedules: [] as { day_of_week: number; start_time: string; end_time: string }[]
   });
 
+  const [grades, setGrades] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [academicYears, setAcademicYears] = useState<any[]>([]);
@@ -78,6 +80,10 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
     return [...items].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   };
 
+  const sortByLevel = (items: any[]): any[] => {
+    return [...items].sort((a, b) => (a.level || 0) - (b.level || 0));
+  };
+
   // ===============================================
   // EFFECTS
   // ===============================================
@@ -107,7 +113,10 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const [subjectsRes, sectionsRes, yearsRes] = await Promise.all([
+      const [gradesRes, subjectsRes, sectionsRes, yearsRes] = await Promise.all([
+        fetch('http://localhost:3001/api/master/grades', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
         fetch('http://localhost:3001/api/master/subjects', {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
@@ -119,20 +128,23 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
         })
       ]);
 
-      if (!subjectsRes.ok || !sectionsRes.ok || !yearsRes.ok) {
+      if (!gradesRes.ok || !subjectsRes.ok || !sectionsRes.ok || !yearsRes.ok) {
         throw new Error('Error al cargar configuración del servidor');
       }
 
+      const gradesData = await gradesRes.json();
       const subjectsData = await subjectsRes.json();
       const sectionsData = await sectionsRes.json();
       const yearsData = await yearsRes.json();
 
+      setGrades(gradesData.data || []);
       setSubjects(subjectsData.data || []);
       setSections(sectionsData.data || []);
       setAcademicYears(yearsData.data || []);
     } catch (error) {
       console.error('Error loading form data:', error);
       toast.error(`Error: ${error instanceof Error ? error.message : 'Desconocido'}`);
+      setGrades([]);
       setSubjects([]);
       setSections([]);
       setAcademicYears([]);
@@ -191,8 +203,8 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
     e.preventDefault();
     
     // Validaciones
-    if (!formData.subjectId || !formData.sectionId || !formData.academicYearId) {
-      toast.error("Por favor completa los campos obligatorios (Materia, Sección, Año Académico)");
+    if (!formData.gradeId || !formData.subjectId || !formData.sectionId || !formData.academicYearId) {
+      toast.error("Por favor completa los campos obligatorios (Grado, Materia, Sección, Año Académico)");
       return;
     }
 
@@ -209,8 +221,9 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
     setIsSubmitting(true);
     try {
       // STEP 1: Create Class
-      // Backend espera snake_case: subject_id, section_id, academic_year_id, weeks_duration
+      // Backend espera snake_case: grade_id, subject_id, section_id, academic_year_id, weeks_duration
       const createClassResponse = await apiClient.classes.createClass({
+        gradeId: formData.gradeId,
         subjectId: formData.subjectId,
         sectionId: formData.sectionId,
         academicYearId: formData.academicYearId,
@@ -250,6 +263,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
       
       // Reset form
       setFormData({
+        gradeId: "",
         subjectId: "",
         sectionId: "",
         academicYearId: "",
@@ -272,6 +286,7 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
 
   const handleClose = () => {
     setFormData({
+      gradeId: "",
       subjectId: "",
       sectionId: "",
       academicYearId: "",
@@ -295,6 +310,21 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
             <h3 className="font-semibold text-sm">Información de la Clase</h3>
             
             <div className="grid grid-cols-2 gap-4">
+              {/* Grado */}
+              <div className="space-y-2">
+                <Label htmlFor="grade">Grado *</Label>
+                <Select value={formData.gradeId} onValueChange={(value) => setFormData(prev => ({ ...prev, gradeId: value }))}>
+                  <SelectTrigger id="grade" disabled={isLoading}>
+                    <SelectValue placeholder="Seleccionar grado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sortByLevel(grades).map(grade => (
+                      <SelectItem key={grade.id} value={grade.id}>{grade.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Materia */}
               <div className="space-y-2">
                 <Label htmlFor="subject">Materia *</Label>
@@ -309,7 +339,9 @@ export function AddClassModal({ isOpen, onClose, onSave }: AddClassModalProps) {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
+            <div className="grid grid-cols-2 gap-4">
               {/* Sección */}
               <div className="space-y-2">
                 <Label htmlFor="section">Sección *</Label>

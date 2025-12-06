@@ -160,32 +160,36 @@ export function TeacherDashboard({ onClassSelect, onAttendanceSelect, onReportsS
         return;
       }
 
-      // AddClassModal ya hace ambas API calls (crear clase + horarios)
-      // Solo necesitamos actualizar el estado local
-      const mappedClass = {
-        id: classData.id,
-        name: classData.name,
-        subject: classData.subject,
-        classroom: classData.classroom || "",
-        studentCount: 0,
-        averageGrade: 0,
-        nextClass: "Por programar",
-        students: [],
-        schedules: classData.schedules || [],
-        academicYear: classData.academicYear,
-        isCurrent: classData.isCurrent,
-        createdAt: classData.createdAt,
-        isActive: classData.isActive
-      };
-      
-      const newClasses = [...classes, mappedClass];
-      setClasses(newClasses);
-      localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(newClasses));
-      
-      toast.success("Clase agregada a tu lista");
+      // Recargar las clases desde el servidor para asegurar que se reflejen todos los cambios
+      const token = tokenService.getToken();
+      if (token) {
+        apiClient.setToken(token);
+      }
+
+      const response = await apiClient.classes.getClasses();
+
+      if (response.success && response.data && Array.isArray(response.data)) {
+        const mappedClasses = response.data.map((cls: any) => ({
+          id: cls.id,
+          name: cls.name,
+          subject: cls.subject,
+          classroom: cls.classroom,
+          studentCount: cls.studentCount || 0,
+          averageGrade: cls.averageGrade || 0,
+          nextClass: "Por programar",
+          students: cls.students || [],
+          academicYear: cls.academicYear,
+          isActive: cls.isActive,
+          schedules: cls.schedules || []
+        }));
+
+        setClasses(mappedClasses);
+        localStorage.setItem(`teacher_classes_${user?.id}`, JSON.stringify(mappedClasses));
+        toast.success("Clase creada y datos actualizados");
+      }
     } catch (error) {
       console.error('Error in handleAddClass:', error);
-      toast.error("Error al agregar clase a la lista");
+      toast.error("Error al actualizar los datos");
     }
   };
 

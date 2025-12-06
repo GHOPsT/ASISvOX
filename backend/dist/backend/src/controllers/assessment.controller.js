@@ -91,8 +91,8 @@ exports.getAssessment = (0, errorHandler_1.asyncHandler)(async (req, res) => {
 // POST - Crear evaluación
 exports.createAssessment = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { class_id, assessment_type_id, name, description, due_date, max_score } = req.body;
-    if (!class_id || !name || !max_score) {
-        throw (0, errorHandler_1.createError)('class_id, name y max_score son requeridos', 400);
+    if (!class_id || !name || !max_score || !assessment_type_id) {
+        throw (0, errorHandler_1.createError)('class_id, name, max_score y assessment_type_id son requeridos', 400);
     }
     // Validar que el usuario puede crear evaluación en esta clase
     const classCheck = await (0, connection_1.query)(`SELECT teacher_id, entity_id FROM classes WHERE id = $1`, [class_id]);

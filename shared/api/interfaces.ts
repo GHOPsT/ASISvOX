@@ -345,6 +345,9 @@ export interface AssessmentAPI {
   
   // DELETE /api/assessments/:id
   deleteAssessment(id: string): Promise<ApiResponse<void>>;
+
+  // GET /api/assessment/types
+  getAssessmentTypes(): Promise<ApiResponse<any[]>>;
 }
 
 export interface AssessmentFilters {
@@ -363,7 +366,8 @@ export interface CreateAssessmentData {
   weight: number;
   maxScore: number;
   classId: string;
-  date: Date;
+  assessmentTypeId: string;
+  dueDate?: Date;
   description?: string;
 }
 
